@@ -23,11 +23,6 @@ A comprehensive, interactive stock market analysis platform built with Python an
 
 [View Live Dashboard](https://your-username.github.io/stock-market-dashboard)
 
-## 📊 Screenshots
-
-![Dashboard Overview](screenshots/dashboard.png)
-![Technical Analysis](screenshots/technical-analysis.png)
-
 ## 🔧 Installation & Setup
 ```bash
 # Clone the repository
