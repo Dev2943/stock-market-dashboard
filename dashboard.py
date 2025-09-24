@@ -101,16 +101,31 @@ def generate_stock_data(symbol, days=252):
     base_price = base_prices.get(symbol, 150.00)
     dates = [datetime.now() - timedelta(days=days-i) for i in range(days)]
     
-    # Generate realistic price movements
-    prices = []
-    current_price = base_price * 0.85
+    # Generate realistic price movements that END at the real current price
+prices = []
+
+# Start from a lower price and work towards the current real price
+start_price = base_price * 0.75  # Start 25% lower
+target_price = base_price        # End at real current price
+
+# Calculate the trend needed to reach target price
+total_return_needed = (target_price / start_price) - 1
+daily_trend = total_return_needed / days
+
+current_price = start_price
+
+for i in range(days):
+    # Apply trend + random walk + volatility
+    daily_return = daily_trend + np.random.normal(0, 0.02)
+    volatility_factor = 1 + np.sin(i/30) * 0.1
     
-    for i in range(days):
-        daily_return = np.random.normal(0.0008, 0.02)
-        volatility_factor = 1 + np.sin(i/30) * 0.1
+    # For the last day, ensure we hit the target price exactly
+    if i == days - 1:
+        current_price = target_price
+    else:
         current_price *= (1 + daily_return * volatility_factor)
-        prices.append(current_price)
-    
+        
+    prices.append(current_price)
     # Create OHLCV data
     data = []
     for i, (date, close) in enumerate(zip(dates, prices)):
