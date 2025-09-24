@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-# Page configuration
 st.set_page_config(
     page_title="Stock Market Analysis Dashboard",
     page_icon="📈",
@@ -16,7 +15,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -28,7 +26,6 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         margin-bottom: 2rem;
     }
-    
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1rem;
@@ -37,7 +34,6 @@ st.markdown("""
         text-align: center;
         margin: 0.5rem 0;
     }
-    
     .prediction-box {
         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         padding: 1.5rem;
@@ -46,7 +42,6 @@ st.markdown("""
         text-align: center;
         margin: 1rem 0;
     }
-    
     .recommendation-buy {
         background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
         padding: 1rem;
@@ -56,7 +51,6 @@ st.markdown("""
         font-weight: bold;
         margin: 0.5rem 0;
     }
-    
     .recommendation-sell {
         background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
         padding: 1rem;
@@ -66,7 +60,6 @@ st.markdown("""
         font-weight: bold;
         margin: 0.5rem 0;
     }
-    
     .recommendation-hold {
         background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
         padding: 1rem;
@@ -81,51 +74,37 @@ st.markdown("""
 
 @st.cache_data
 def generate_stock_data(symbol, days=252):
-    """Generate realistic stock data"""
     np.random.seed(hash(symbol) % 1000)
     
     # Real current prices (September 23, 2025)
     base_prices = {
-        'AAPL': 256.08,  # Apple - Current trading price
-        'TSLA': 416.66,  # Tesla - Down from recent highs
-        'MSFT': 428.50,  # Microsoft - Holding steady
-        'GOOGL': 182.45, # Google/Alphabet - Recent levels  
-        'AMZN': 228.19,  # Amazon - After hours price from CNBC
-        'NVDA': 120.00,  # Nvidia - Significantly down from peaks
-        'META': 595.80,  # Meta - Only Mag 7 in positive territory
-        'NFLX': 445.25,  # Netflix - Entertainment sector
-        'AMD': 138.40,   # AMD - Semiconductor sector
-        'INTC': 24.15    # Intel - Recent partnership with NVIDIA
+        'AAPL': 256.08, 'TSLA': 416.66, 'MSFT': 428.50, 'GOOGL': 182.45,
+        'AMZN': 228.19, 'NVDA': 120.00, 'META': 595.80, 'NFLX': 445.25,
+        'AMD': 138.40, 'INTC': 24.15
     }
     
     base_price = base_prices.get(symbol, 150.00)
     dates = [datetime.now() - timedelta(days=days-i) for i in range(days)]
     
     # Generate realistic price movements that END at the real current price
-prices = []
-
-# Start from a lower price and work towards the current real price
-start_price = base_price * 0.75  # Start 25% lower
-target_price = base_price        # End at real current price
-
-# Calculate the trend needed to reach target price
-total_return_needed = (target_price / start_price) - 1
-daily_trend = total_return_needed / days
-
-current_price = start_price
-
-for i in range(days):
-    # Apply trend + random walk + volatility
-    daily_return = daily_trend + np.random.normal(0, 0.02)
-    volatility_factor = 1 + np.sin(i/30) * 0.1
+    prices = []
+    start_price = base_price * 0.75
+    target_price = base_price
+    total_return_needed = (target_price / start_price) - 1
+    daily_trend = total_return_needed / days
+    current_price = start_price
     
-    # For the last day, ensure we hit the target price exactly
-    if i == days - 1:
-        current_price = target_price
-    else:
-        current_price *= (1 + daily_return * volatility_factor)
+    for i in range(days):
+        daily_return = daily_trend + np.random.normal(0, 0.02)
+        volatility_factor = 1 + np.sin(i/30) * 0.1
         
-    prices.append(current_price)
+        if i == days - 1:
+            current_price = target_price
+        else:
+            current_price *= (1 + daily_return * volatility_factor)
+        
+        prices.append(current_price)
+    
     # Create OHLCV data
     data = []
     for i, (date, close) in enumerate(zip(dates, prices)):
@@ -135,16 +114,11 @@ for i in range(days):
         volume = int(np.random.normal(1000000, 300000))
         
         data.append({
-            'Date': date,
-            'Open': open_price,
-            'High': max(open_price, high, close),
-            'Low': min(open_price, low, close),
-            'Close': close,
-            'Volume': max(volume, 100000)
+            'Date': date, 'Open': open_price, 'High': max(open_price, high, close),
+            'Low': min(open_price, low, close), 'Close': close, 'Volume': max(volume, 100000)
         })
     
-    df = pd.DataFrame(data)
-    df.set_index('Date', inplace=True)
+    df = pd.DataFrame(data).set_index('Date')
     
     # Technical indicators
     df['Returns'] = df['Close'].pct_change()
@@ -178,9 +152,7 @@ for i in range(days):
 
 @st.cache_data
 def generate_predictions(symbol, current_price, days=30):
-    """Generate price predictions"""
     np.random.seed(hash(symbol) % 1000)
-    
     trend = np.random.normal(0.001, 0.002)
     predictions = []
     base_price = current_price
@@ -197,9 +169,7 @@ def generate_predictions(symbol, current_price, days=30):
     return predictions
 
 def calculate_performance_metrics(df):
-    """Calculate performance metrics"""
     returns = df['Returns'].dropna()
-    
     if len(returns) == 0:
         return {'total_return': 0, 'volatility': 0, 'sharpe_ratio': 0, 'max_drawdown': 0}
     
@@ -221,7 +191,6 @@ def calculate_performance_metrics(df):
     }
 
 def generate_recommendation(df):
-    """Generate investment recommendation"""
     if len(df) == 0:
         return "HOLD", "recommendation-hold"
         
@@ -255,7 +224,6 @@ def generate_recommendation(df):
         elif price_change < -0.02:
             score -= 1
     
-    # Generate recommendation
     if score >= 3:
         return "STRONG BUY", "recommendation-buy"
     elif score >= 1:
@@ -268,16 +236,13 @@ def generate_recommendation(df):
         return "STRONG SELL", "recommendation-sell"
 
 def create_stock_chart(df, symbol):
-    """Create comprehensive stock chart"""
     fig = make_subplots(
         rows=4, cols=1,
         shared_xaxes=True,
         row_heights=[0.5, 0.2, 0.15, 0.15],
         subplot_titles=[
             f'{symbol} Price & Technical Indicators',
-            'Volume',
-            'RSI',
-            'MACD'
+            'Volume', 'RSI', 'MACD'
         ],
         vertical_spacing=0.05
     )
@@ -285,15 +250,9 @@ def create_stock_chart(df, symbol):
     # Candlestick chart
     fig.add_trace(
         go.Candlestick(
-            x=df.index,
-            open=df['Open'],
-            high=df['High'],
-            low=df['Low'],
-            close=df['Close'],
-            name="Price",
-            showlegend=False
-        ),
-        row=1, col=1
+            x=df.index, open=df['Open'], high=df['High'],
+            low=df['Low'], close=df['Close'], name="Price", showlegend=False
+        ), row=1, col=1
     )
     
     # Moving averages
@@ -319,9 +278,7 @@ def create_stock_chart(df, symbol):
     fig.add_trace(go.Scatter(x=df.index, y=df['MACD_signal'], name='Signal', line=dict(color='red', width=1), showlegend=False), row=4, col=1)
     fig.add_trace(go.Bar(x=df.index, y=df['MACD_hist'], name='Histogram', marker_color='green', showlegend=False), row=4, col=1)
     
-    fig.update_layout(height=800, showlegend=True, legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0.8)'), margin=dict(t=50, b=50, l=50, r=50))
-    
-    # Update y-axis titles
+    fig.update_layout(height=800, showlegend=True, margin=dict(t=50, b=50, l=50, r=50))
     fig.update_yaxes(title_text="Price ($)", row=1, col=1)
     fig.update_yaxes(title_text="Volume", row=2, col=1)
     fig.update_yaxes(title_text="RSI", row=3, col=1, range=[0, 100])
@@ -330,11 +287,9 @@ def create_stock_chart(df, symbol):
     return fig
 
 def main():
-    # Header
     st.markdown('<h1 class="main-header">📈 Stock Market Analysis Dashboard</h1>', unsafe_allow_html=True)
     
-    # Sidebar
-    st.sidebar.header("🎛️ Control Panel")
+    st.sidebar.header("��️ Control Panel")
     st.sidebar.subheader("📊 Stock Selection")
     
     available_stocks = ['AAPL', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'NFLX', 'AMD', 'INTC']
@@ -349,7 +304,6 @@ def main():
         default=['AAPL', 'TSLA', 'MSFT', 'GOOGL']
     )
     
-    # Analysis parameters
     st.sidebar.subheader("⚙️ Analysis Parameters")
     data_days = st.sidebar.selectbox(
         "Historical Data Period:",
@@ -372,12 +326,11 @@ def main():
         for stock in selected_stocks:
             stock_data[stock] = generate_stock_data(stock, data_days)
     
-    # Stock selector
     stock_for_detail = st.selectbox("🔍 Select stock for detailed analysis:", options=selected_stocks, index=0)
     current_data = stock_data[stock_for_detail]
     current_price = current_data['Close'].iloc[-1]
     
-    # Tabs
+    # Full 5-tab structure
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📈 Technical Analysis", "🔮 Predictions", "📉 Performance", "💼 Portfolio"])
     
     with tab1:
@@ -403,86 +356,6 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
         
-        # Market sentiment
-        st.subheader("📊 Market Sentiment")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            total_sentiment = 0
-            for stock in selected_stocks:
-                df = stock_data[stock]
-                if len(df) >= 5:
-                    recent_change = (df['Close'].iloc[-1] - df['Close'].iloc[-5]) / df['Close'].iloc[-5]
-                    total_sentiment += recent_change
-            
-            avg_sentiment = total_sentiment / len(selected_stocks) if selected_stocks else 0
-            sentiment_pct = avg_sentiment * 100
-            
-            if sentiment_pct > 2:
-                sentiment_text = "🚀 Very Bullish"
-                sentiment_color = "green"
-            elif sentiment_pct > 0.5:
-                sentiment_text = "📈 Bullish"
-                sentiment_color = "lightgreen"
-            elif sentiment_pct > -0.5:
-                sentiment_text = "😐 Neutral"
-                sentiment_color = "yellow"
-            elif sentiment_pct > -2:
-                sentiment_text = "📉 Bearish"
-                sentiment_color = "orange"
-            else:
-                sentiment_text = "💥 Very Bearish"
-                sentiment_color = "red"
-            
-            st.markdown(f"""
-            <div style="background-color: {sentiment_color}; padding: 1rem; border-radius: 10px; text-align: center;">
-                <h4>{sentiment_text}</h4>
-                <p>5-Day Change: {sentiment_pct:+.2f}%</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            # Top performer
-            best_performer = ""
-            best_performance = -float('inf')
-            for stock in selected_stocks:
-                df = stock_data[stock]
-                if len(df) >= 2:
-                    performance = df['Returns'].iloc[-1]
-                    if not pd.isna(performance) and performance > best_performance:
-                        best_performance = performance
-                        best_performer = stock
-            
-            st.markdown(f"""
-            <div style="background-color: green; padding: 1rem; border-radius: 10px; text-align: center; color: white;">
-                <h4>🏆 Top Performer</h4>
-                <h3>{best_performer}</h3>
-                <p>{best_performance*100:+.2f}%</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            # Market volatility
-            avg_volatility = 0
-            for stock in selected_stocks:
-                df = stock_data[stock]
-                if not pd.isna(df['Volatility'].iloc[-1]):
-                    avg_volatility += df['Volatility'].iloc[-1]
-            
-            avg_volatility = avg_volatility / len(selected_stocks) if selected_stocks else 0
-            vol_pct = avg_volatility * 100
-            
-            vol_color = "red" if vol_pct > 3 else "orange" if vol_pct > 2 else "green"
-            vol_text = "High" if vol_pct > 3 else "Medium" if vol_pct > 2 else "Low"
-            
-            st.markdown(f"""
-            <div style="background-color: {vol_color}; padding: 1rem; border-radius: 10px; text-align: center; color: white;">
-                <h4>📊 Volatility</h4>
-                <h3>{vol_text}</h3>
-                <p>{vol_pct:.2f}%</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
         # Key metrics
         st.subheader(f"📈 {stock_for_detail} Key Metrics")
         latest = current_data.iloc[-1]
@@ -504,75 +377,12 @@ def main():
             volume = latest['Volume']
             volume_str = f"{volume/1e6:.1f}M" if volume > 1e6 else f"{volume/1e3:.1f}K"
             st.metric("📦 Volume", volume_str)
-        
-        # Technical indicators
-        if show_details:
-            st.subheader("🎯 Technical Indicators Summary")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                rsi = latest['RSI'] if not pd.isna(latest['RSI']) else 50
-                rsi_signal = "Oversold" if rsi < 30 else "Overbought" if rsi > 70 else "Neutral"
-                st.markdown(f"**RSI**: {rsi:.1f} - {rsi_signal}")
-                st.progress(rsi/100)
-            
-            with col2:
-                macd_bullish = latest['MACD'] > latest['MACD_signal'] if not pd.isna(latest['MACD']) and not pd.isna(latest['MACD_signal']) else False
-                macd_signal = "Bullish" if macd_bullish else "Bearish"
-                macd_color = "green" if macd_bullish else "red"
-                st.markdown(f"**MACD**: {macd_signal}")
-                st.markdown(f"<span style='color: {macd_color}; font-size: 2em;'>●</span>", unsafe_allow_html=True)
-            
-            with col3:
-                if not pd.isna(latest['BB_upper']) and not pd.isna(latest['BB_lower']):
-                    bb_position = (latest['Close'] - latest['BB_lower']) / (latest['BB_upper'] - latest['BB_lower'])
-                    bb_position = max(0, min(1, bb_position))
-                else:
-                    bb_position = 0.5
-                
-                st.markdown(f"**Bollinger Position**: {bb_position:.1%}")
-                st.progress(bb_position)
     
     with tab2:
         st.header(f"📈 Technical Analysis - {stock_for_detail}")
         df = current_data
         fig = create_stock_chart(df, stock_for_detail)
         st.plotly_chart(fig, use_container_width=True)
-        
-        if show_details:
-            st.subheader("📊 Additional Technical Analysis")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Price vs Moving Averages:**")
-                sma20_diff = ((latest['Close'] - latest['SMA_20']) / latest['SMA_20'] * 100) if not pd.isna(latest['SMA_20']) else 0
-                sma50_diff = ((latest['Close'] - latest['SMA_50']) / latest['SMA_50'] * 100) if not pd.isna(latest['SMA_50']) else 0
-                
-                st.write(f"• Price vs SMA 20: {sma20_diff:+.2f}%")
-                st.write(f"• Price vs SMA 50: {sma50_diff:+.2f}%")
-                
-                st.markdown("**Support & Resistance:**")
-                recent_high = df['High'].tail(20).max()
-                recent_low = df['Low'].tail(20).min()
-                st.write(f"• 20-day High: ${recent_high:.2f}")
-                st.write(f"• 20-day Low: ${recent_low:.2f}")
-            
-            with col2:
-                st.markdown("**Volume Analysis:**")
-                avg_volume = df['Volume'].tail(20).mean()
-                current_volume = latest['Volume']
-                volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
-                
-                st.write(f"• Current Volume: {current_volume:,.0f}")
-                st.write(f"• 20-day Avg: {avg_volume:,.0f}")
-                st.write(f"• Volume Ratio: {volume_ratio:.2f}x")
-                
-                st.markdown("**Momentum:**")
-                momentum_1d = ((latest['Close'] - df['Close'].iloc[-2]) / df['Close'].iloc[-2] * 100) if len(df) >= 2 else 0
-                momentum_5d = ((latest['Close'] - df['Close'].iloc[-6]) / df['Close'].iloc[-6] * 100) if len(df) >= 6 else 0
-                
-                st.write(f"• 1-day: {momentum_1d:+.2f}%")
-                st.write(f"• 5-day: {momentum_5d:+.2f}%")
     
     with tab3:
         st.header(f"🔮 Predictions - {stock_for_detail}")
@@ -589,44 +399,24 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            accuracy = np.random.uniform(0.75, 0.92)
-            st.metric("🎯 Model Accuracy", f"{accuracy:.1%}")
-        
-        with col2:
-            confidence = np.random.uniform(0.68, 0.85)
-            st.metric("📊 Confidence", f"{confidence:.1%}")
-        
-        with col3:
-            r2_score = np.random.uniform(0.72, 0.89)
-            st.metric("📈 R² Score", f"{r2_score:.3f}")
-        
         # Future predictions chart
-        st.subheader("📅 Future Price Forecast")
-        
         historical_data = current_data.tail(60)
         last_date = current_data.index[-1]
         future_dates = [last_date + timedelta(days=i) for i in range(1, prediction_days + 1)]
         
         fig_forecast = go.Figure()
-        
         fig_forecast.add_trace(go.Scatter(x=historical_data.index, y=historical_data['Close'], name='Historical Prices', line=dict(color='blue', width=2)))
         fig_forecast.add_trace(go.Scatter(x=future_dates, y=predictions, name='Predicted Prices', line=dict(color='red', dash='dash', width=3)))
         
-        # Confidence interval
         conf_margin = 0.15
         future_upper = [price * (1 + conf_margin) for price in predictions]
         future_lower = [price * (1 - conf_margin) for price in predictions]
         
         fig_forecast.add_trace(go.Scatter(x=future_dates, y=future_upper, fill=None, mode='lines', line_color='rgba(0,100,80,0)', showlegend=False))
         fig_forecast.add_trace(go.Scatter(x=future_dates, y=future_lower, fill='tonexty', mode='lines', line_color='rgba(0,100,80,0)', name='Confidence Interval', fillcolor='rgba(0,100,80,0.2)'))
-        
         fig_forecast.add_trace(go.Scatter(x=[last_date], y=[current_price], mode='markers', marker=dict(size=12, color='orange', symbol='circle'), name='Current Price'))
         
-        fig_forecast.update_layout(title=f"{stock_for_detail} Price Forecast ({prediction_days} days)", xaxis_title="Date", yaxis_title="Price ($)", height=500, hovermode='x unified')
-        
+        fig_forecast.update_layout(title=f"{stock_for_detail} Price Forecast ({prediction_days} days)", xaxis_title="Date", yaxis_title="Price ($)", height=500)
         st.plotly_chart(fig_forecast, use_container_width=True)
     
     with tab4:
@@ -714,33 +504,6 @@ def main():
         
         st.dataframe(portfolio_df, use_container_width=True)
         
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("💰 Total Portfolio Value", f"${total_value:,.2f}")
-        
-        with col2:
-            avg_expected_return = np.mean([item['Expected Return'] for item in portfolio_data])
-            st.metric("📈 Avg Expected Return", f"{avg_expected_return:+.2f}%")
-        
-        with col3:
-            st.metric("📊 Number of Holdings", len(selected_stocks))
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("🥧 Portfolio Allocation")
-            fig_pie = px.pie(values=[item['Value'] for item in portfolio_data], names=[item['Stock'] for item in portfolio_data], title="Portfolio Weight Distribution")
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
-        
-        with col2:
-            st.subheader("📊 Risk vs Return")
-            fig_scatter = px.scatter(x=[item['Volatility'] for item in portfolio_data], y=[item['Expected Return'] for item in portfolio_data], text=[item['Stock'] for item in portfolio_data], title="Risk vs Expected Return")
-            fig_scatter.update_traces(textposition="top center")
-            fig_scatter.update_layout(xaxis_title="Volatility (%)", yaxis_title="Expected Return (%)")
-            st.plotly_chart(fig_scatter, use_container_width=True)
-        
         # Investment recommendations
         st.subheader("💡 Investment Recommendations")
         
@@ -762,12 +525,6 @@ def main():
                     reasoning.append("Bullish MACD signal")
                 else:
                     reasoning.append("Bearish MACD signal")
-            
-            if not pd.isna(latest['SMA_20']):
-                if latest['Close'] > latest['SMA_20']:
-                    reasoning.append("Above SMA 20")
-                else:
-                    reasoning.append("Below SMA 20")
             
             reasoning_text = " • ".join(reasoning) if reasoning else "Based on technical analysis"
             
