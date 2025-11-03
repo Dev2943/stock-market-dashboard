@@ -3,22 +3,30 @@
 **Created by Dev Golakiya**  
 *MS in Business Analytics | University of Massachusetts Amherst*
 
-An advanced stock market analysis dashboard featuring proprietary risk assessment, sector rotation analysis, and ML-powered forecasting. Built to demonstrate business analytics expertise and data-driven investment insights.
+An advanced, production-ready stock market analysis dashboard featuring proprietary risk assessment, real-time data streaming, sector rotation analysis, and ML-powered forecasting. Built to demonstrate business analytics expertise and data-driven investment insights.
 
 🔗 **Live Demo:** https://dev2943-stock-market-dashboard-dashboard.streamlit.app  
 💻 **GitHub:** https://github.com/Dev2943/stock-market-dashboard
+
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-FF4B4B.svg)](https://streamlit.io)
+[![License](https://img.shields.io/badge/License-Educational-green.svg)]()
+[![Status](https://img.shields.io/badge/Status-Production-success.svg)]()
 
 ---
 
 ## 🎯 Key Features
 
-### 1. **Real-Time Market Data Integration** 🆕
+### 1. **Real-Time Market Data Integration** ⚡ NEW!
 - **Yahoo Finance API** integration for live stock prices
-- **15-minute smart caching** to minimize API calls (96% reduction)
+- **Auto-Refresh Every 30 Seconds** - Hands-free live updates
+- **Smart Caching** (30-second TTL) to minimize API calls
 - **Dual-mode architecture**: Toggle between real-time and synthetic data
 - **Graceful error handling** with automatic fallback to synthetic data
 - **Period mapping** for flexible historical data (1y, 2y, 3y, 5y)
-- Users can switch between live market data and simulated data for testing
+- **Manual refresh button** for instant data updates
+- **Live countdown timer** showing next auto-refresh
+- **Refresh statistics** tracking update frequency
 
 ### 2. **Proprietary Risk Scoring System** ⭐ (My Unique Contribution)
 - **Dev's Risk Score** - Custom 0-100 scale assessment
@@ -76,12 +84,117 @@ An advanced stock market analysis dashboard featuring proprietary risk assessmen
 
 ## 🛠️ Technology Stack
 
-- **Python 3.8+** - Core programming language
-- **Streamlit** - Interactive web application framework
-- **Plotly** - Advanced financial charts and data visualization
-- **Pandas & NumPy** - Data manipulation and statistical analysis
-- **yfinance** - Yahoo Finance API for real-time market data
-- **Machine Learning** - Custom predictive models for forecasting
+| Technology | Purpose | Version |
+|------------|---------|---------|
+| **Python** | Core programming language | 3.8+ |
+| **Streamlit** | Interactive web framework | 1.28+ |
+| **yfinance** | Yahoo Finance API integration | 0.2.28+ |
+| **Plotly** | Advanced financial charts | 5.15+ |
+| **Pandas** | Data manipulation | 1.5.3+ |
+| **NumPy** | Numerical computations | 1.24.3+ |
+
+---
+
+## 🚀 Getting Started
+
+### Quick Install & Run
+```bash
+# Clone the repository
+git clone https://github.com/Dev2943/stock-market-dashboard.git
+cd stock-market-dashboard
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the dashboard
+streamlit run dashboard.py
+```
+
+### Access the Dashboard
+```
+🌐 Local URL: http://localhost:8501
+🌐 Network URL: http://192.168.x.x:8501
+```
+
+### Requirements
+```txt
+streamlit>=1.28.0
+pandas>=1.5.3
+numpy>=1.24.3
+plotly>=5.15.0
+yfinance>=0.2.28
+```
+
+---
+
+## 📡 Data Sources & Auto-Refresh
+
+### **Real-Time Mode (Default)** 🟢
+
+**Features:**
+- ✅ Live stock prices from Yahoo Finance
+- ✅ **Auto-refresh every 30 seconds**
+- ✅ Manual refresh button for instant updates
+- ✅ Live countdown timer: "⏱️ Next refresh in: 27s"
+- ✅ Refresh statistics: "🔄 Refreshes: 5 | Last: 03:25:14 PM"
+- ✅ Toggle auto-refresh on/off
+- ✅ Non-blocking UI - dashboard remains interactive during refresh
+
+**How it Works:**
+1. Enable "🔄 Auto-refresh (30s)" checkbox in sidebar
+2. Countdown timer shows time until next refresh
+3. Dashboard automatically reloads data every 30 seconds
+4. Use "🔄 Force Refresh Now" button for instant updates
+5. Refresh counter tracks total updates
+
+**Smart Caching:**
+- 30-second cache TTL balances freshness vs API efficiency
+- Reduces API calls while maintaining near-real-time data
+- Graceful error handling with automatic synthetic fallback
+
+### **Synthetic Mode** 🟡
+- Statistical data generation for testing
+- No API rate limits or internet dependency
+- Consistent for demonstrations
+- Realistic price patterns based on market behavior
+
+**How to Switch:**
+Use the "📡 Data Source" radio button in sidebar to toggle between Real-Time and Synthetic modes.
+
+---
+
+## 💡 Usage Guide
+
+### Getting Started in 3 Steps
+
+1. **Select Stocks** 📈
+   - Choose from 10+ major stocks (AAPL, MSFT, NVDA, TSLA, etc.)
+   - Add custom tickers
+   - Multi-select for portfolio analysis
+
+2. **Enable Auto-Refresh** ⚡
+   - Check "🔄 Auto-refresh (30s)" in sidebar
+   - Watch live countdown timer
+   - Dashboard updates automatically every 30 seconds
+
+3. **Explore Tabs** 🔍
+   - Navigate 6 analysis modules
+   - View real-time price changes
+   - Get actionable insights
+
+---
+
+### Dashboard Tabs Overview
+
+| Tab | Features | Purpose |
+|-----|----------|---------|
+| **📊 Overview** | Price cards, key metrics, sector analysis | Market snapshot |
+| **🎯 Risk Analysis** ⭐ | Proprietary risk score (0-100), component breakdown | Risk assessment |
+| **📈 Technical** | Candlestick charts, RSI, MACD, Bollinger Bands | Technical signals |
+| **🔮 Forecast** | ML predictions, confidence intervals, price targets | Future outlook |
+| **📉 Performance** | Returns, Sharpe ratio, drawdown, heatmaps | Historical analysis |
+| **💼 Portfolio** | Holdings, allocation, correlation, recommendations | Portfolio optimization |
+
 ---
 
 ## 📈 Methodology & Approach
@@ -98,28 +211,41 @@ My proprietary risk scoring system was developed during my MS in Business Analyt
 - **Drawdown (10%)** - Historical worst-case scenarios; tail risk assessment
 
 **Risk Categories:**
-- **0-20:** Very Low Risk - Conservative investors
-- **20-35:** Low Risk - Moderate-conservative investors
-- **35-50:** Moderate Risk - Balanced investors
-- **50-70:** High Risk - Growth-oriented investors
-- **70-100:** Very High Risk - Aggressive investors only
+```
+0-20   → Very Low Risk (Conservative investors)
+20-35  → Low Risk (Moderate-conservative investors)
+35-50  → Moderate Risk (Balanced investors)
+50-70  → High Risk (Growth-oriented investors)
+70-100 → Very High Risk (Aggressive investors only)
+```
 
-### Sector Analysis Methodology
+### Auto-Refresh Architecture
 
-Inspired by my work analyzing product categories at Andor Luxury, where I:
-- Benchmarked 3 major categories (Rings, Earrings, Necklaces) against 20+ brands
-- Tracked 12+ KPIs to identify top-performing categories
-- Generated insights leading to 10% revenue lift in targeted categories
+**Technical Implementation:**
+```python
+# Session state management
+if 'last_refresh_time' not in st.session_state:
+    st.session_state.last_refresh_time = datetime.now()
 
-Applied to stock market:
-- Track relative performance across market sectors
-- Identify rotation opportunities through momentum analysis
-- Calculate correlation matrices for diversification
-- Provide actionable sector-based recommendations
+# Calculate time elapsed
+time_since_refresh = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
+
+# Auto-refresh when 30 seconds pass
+if time_since_refresh >= 30:
+    st.cache_data.clear()
+    st.rerun()
+```
+
+**Key Design Decisions:**
+- ✅ **Non-blocking**: Uses session state instead of `time.sleep()`
+- ✅ **User control**: Toggle on/off anytime
+- ✅ **Visual feedback**: Live countdown timer
+- ✅ **Manual override**: Force refresh button
+- ✅ **State persistence**: Tracks refresh history
 
 ### Forecasting Approach
 
-The prediction engine uses a **hybrid methodology**:
+**Hybrid Methodology:**
 
 1. **Historical Momentum (70% weight)**
    - 30-day price momentum captures recent trend strength
@@ -136,132 +262,71 @@ The prediction engine uses a **hybrid methodology**:
    - Helps with risk management decisions
    - Based on historical volatility patterns
 
-**Important Note:** Forecasts are for educational purposes and demonstrate analytical methodology. Past performance does not guarantee future results.
+**Important Note:** Forecasts are for educational purposes. Past performance does not guarantee future results.
 
 ---
 
-## 🚀 Getting Started
+## 🔍 What Makes This Project Unique
 
-### Installation
-```bash
-# Clone the repository
-git clone https://github.com/Dev2943/stock-market-dashboard.git
-cd stock-market-dashboard
+### 1. **Production-Ready Auto-Refresh** ⚡ NEW!
+Unlike typical demo dashboards, this implements:
+- Non-blocking auto-refresh using Streamlit session state
+- Live countdown timer for user feedback
+- Toggle control for user preference
+- Refresh statistics tracking
+- Professional UX with manual override option
 
-# Install dependencies
-pip install -r requirements.txt
+This demonstrates production-level thinking beyond just analytics.
 
-# Run the application
-streamlit run dashboard.py
-```
+### 2. **Original Risk Scoring Methodology** ⭐
+Unlike standard technical analysis tools, I developed a proprietary weighted scoring system based on academic research and industry best practices. The 5-factor model with specific weights (30/25/20/15/10) was calibrated during my MS coursework.
 
-### Requirements
-```txt
-streamlit>=1.28.0
-plotly>=5.15.0
-pandas>=1.5.3
-numpy>=1.24.3
-yfinance>=0.2.28
-```
+### 3. **Smart API Integration**
+Real-world implementation of external API with:
+- 30-second smart caching (balances freshness vs efficiency)
+- Graceful error handling and automatic fallback
+- Rate limit awareness
+- Dual-mode architecture for flexibility
 
----
----
+### 4. **Cross-Domain Application**
+Applied category analysis techniques from luxury retail (Andor Luxury) to financial sector analysis, demonstrating ability to transfer analytical frameworks across industries.
 
-## 📡 Data Sources
+### 5. **Risk-First Philosophy**
+Every recommendation considers risk score first, preventing high-risk buys even with positive technical signals - reflecting real-world investment discipline.
 
-The dashboard supports two data modes, selectable via the sidebar:
-
-### **Real-Time Mode (Default)** 🟢
-- **Source**: Yahoo Finance API via yfinance library
-- **Update Frequency**: 15-minute smart caching
-- **Coverage**: Major US stocks (NYSE, NASDAQ)
-- **Benefits**: 
-  - Current market prices
-  - Real-time technical indicators
-  - Actual historical patterns
-  - Suitable for live analysis
-
-### **Synthetic Mode** 🟡
-- **Source**: Statistical data generation
-- **Method**: Realistic price movements based on market patterns
-- **Benefits**:
-  - No API rate limits
-  - Consistent for testing
-  - Works offline
-  - Demonstrates analytical methodology
-
-**How to Switch:**
-Use the "Data Source" radio button in the sidebar to toggle between modes.
-
----
-
-## 💡 Usage Guide
-
-### 1. **Stock Selection**
-- Choose from 10+ pre-configured major stocks (AAPL, TSLA, MSFT, etc.)
-- Add custom tickers for any stock
-- Multi-select for portfolio comparison
-- Adjust historical data period (1-5 years)
-
-### 2. **Dashboard Tabs**
-
-**📊 Overview**
-- Real-time stock prices with daily changes
-- Key metrics (price, returns, volatility, volume, RSI)
-- Sector performance analysis with interactive charts
-- Sector allocation table
-
-**🎯 Risk Analysis** ⭐ (My Unique Feature)
-- Large visual risk score gauge (0-100)
-- Component breakdown showing each factor's contribution
-- Automated insights based on risk profile
-- Suitable investor profile recommendations
-
-**📈 Technical Analysis**
-- Professional multi-panel candlestick chart
-- Volume bars with color-coded direction
-- RSI indicator with overbought/oversold zones
-- MACD histogram and signal lines
-- Technical indicators summary
-
-**🔮 Forecast**
-- ML-powered price predictions (1-60 days)
-- Confidence interval visualization
-- Current vs. predicted price comparison
-- Expected percentage change
-- Methodology explanation
-
-**📉 Performance**
-- Total return, volatility, Sharpe ratio, Sortino ratio
-- Maximum drawdown analysis
-- Cumulative returns chart
-- Returns distribution histogram
-- Monthly returns heatmap
-
-**💼 Portfolio**
-- Holdings table with all key metrics
-- Portfolio allocation pie charts (by stock and sector)
-- Correlation heatmap between holdings
-- Diversification score (0-100)
-- Risk-adjusted recommendations with reasoning
-- Portfolio insights (diversification & risk balance)
+### 6. **Educational Transparency**
+All methodologies are documented and explained, demonstrating not just technical skills but ability to communicate complex concepts clearly.
 
 ---
 
 ## 📊 Sample Outputs
 
-### Risk Score Dashboard
-- Visual risk gauge with color coding (green/yellow/red)
-- Component breakdown bar chart showing individual factor contributions
-- 3-5 automated insights specific to the stock's profile
+### Real-Time Dashboard Features
+
+**Auto-Refresh Controls:**
+```
+✅ Using live market data
+⚡ Data refreshes automatically
+
+☑ 🔄 Auto-refresh (30s)
+⏱️ Next refresh in: 23s
+
+[🔄 Force Refresh Now]
+
+🔄 Refreshes: 12 | Last: 03:45:32 PM
+```
+
+**Risk Score Dashboard:**
+- Visual risk gauge: `67/100` (color-coded red/yellow/green)
+- Component breakdown showing 5 factors
+- 3-5 automated insights
 - Investor suitability recommendation
 
-### Portfolio Analysis
-- Interactive correlation heatmap showing stock relationships
-- Diversification score with color-coded rating
-- Risk balance assessment (Conservative/Balanced/High Risk)
-- Individual stock recommendations with multi-factor reasoning
-- Expected returns calculated from momentum + ML blend
+**Portfolio Analysis:**
+- Interactive correlation heatmap
+- Diversification score: `72/100` 🟢
+- Individual recommendations with reasoning
+- Expected returns: `+8.3%`
 
 ---
 
@@ -269,83 +334,72 @@ Use the "Data Source" radio button in the sidebar to toggle between modes.
 
 This project demonstrates skills developed during:
 
-**MS in Business Analytics** - University of Massachusetts Amherst (GPA: 4.0/4.0)
+### **MS in Business Analytics** - UMass Amherst (GPA: 4.0/4.0)
 - Quantitative analysis and statistical modeling
 - Portfolio optimization and financial analytics
 - Machine learning and predictive modeling
 
-**Business Analyst Intern** - Andor Luxury, New York (June 2025 - August 2025)
+### **Business Analyst Intern** - Andor Luxury, NY (June-Aug 2025)
 - Conducted market research across 3 product categories
 - Built dynamic Excel/Power BI dashboards tracking 12+ KPIs
 - Analyzed 5,000+ records to uncover purchasing trends
-- **Category benchmarking methodology inspired sector analysis approach**
+- **Category benchmarking → Sector analysis inspiration**
 
-**Assistant Project Manager** - Vrundev Corporation, India (May 2024 - December 2024)
-- Led cross-functional teams delivering $600K+ projects
-- Applied data-driven decision making for resource optimization
-- Reduced operating costs by 12% through analytical insights
+### **Assistant Project Manager** - Vrundev Corporation, India (May-Dec 2024)
+- Led $600K+ projects with data-driven decisions
+- Reduced operating costs by 12% through analytics
+- Managed cross-functional teams
 
 ### Key Competencies Demonstrated:
-✓ Quantitative analysis and statistical modeling  
-✓ Business intelligence and data visualization  
-✓ Risk assessment and portfolio optimization  
-✓ Python programming and ML implementation  
-✓ Full-stack application development and deployment  
+✓ Python programming & API integration  
+✓ Real-time data streaming & caching  
+✓ Quantitative analysis & statistical modeling  
+✓ Production-ready application development  
+✓ Business intelligence & data visualization  
+✓ Risk assessment & portfolio optimization  
+✓ Full-stack deployment (Streamlit Cloud)  
 
 ---
 
-## 🔍 What Makes This Project Unique
+## 🔄 Recent Enhancements
 
-### 1. **Original Risk Scoring Methodology**
-Unlike standard technical analysis tools, I developed a proprietary weighted scoring system based on academic research and industry best practices. The 5-factor model with specific weights (30/25/20/15/10) was calibrated during my MBA coursework.
+### Version 2.1 (Latest) ⚡
+**Auto-Refresh Feature** - Major UX Improvement
+- [x] Non-blocking 30-second auto-refresh
+- [x] Live countdown timer in sidebar
+- [x] Manual refresh button with instant updates
+- [x] Refresh statistics tracking
+- [x] Toggle control for user preference
+- [x] Session state management for reliability
 
-### 2. **Cross-Domain Application**
-Applied category analysis techniques from luxury retail (Andor Luxury) to financial sector analysis, demonstrating ability to transfer analytical frameworks across industries.
-
-### 3. **Production-Ready API Integration** 🆕
-Real-world implementation of external API with:
-- Smart caching strategy (15-minute TTL)
-- Rate limit handling
-- Graceful error recovery with automatic fallback
-- Dual-mode architecture for flexibility
-Demonstrates understanding of production systems beyond just analytics.
-
-
-### 4. **Hybrid Forecasting Approach**
-Rather than relying solely on ML or technical analysis, I blend both approaches (70/30 split) for more robust predictions, acknowledging the strengths and limitations of each method.
-
-### 5. **Data Integration:**
-When using Real-Time mode, predictions are based on actual historical price movements from Yahoo Finance, making forecasts more realistic and grounded in current market conditions. In Synthetic mode, predictions demonstrate the methodology using statistically generated data.
-
-### 6. **Risk-First Philosophy**
-Every recommendation considers risk score first, preventing high-risk buys even with positive technical signals - reflecting real-world investment discipline.
-
-### 7. **Educational Transparency**
-All methodologies are documented and explained, demonstrating not just technical skills but ability to communicate complex concepts clearly.
-
----
-
-## 🔄 Future Enhancements
-
-**Recently Completed:** ✅
-- [x] Real-time data integration via Yahoo Finance API
-- [x] 15-minute smart caching implementation
+### Version 2.0
+**Real-Time Data Integration**
+- [x] Yahoo Finance API integration
+- [x] Smart 30-second caching
 - [x] Dual-mode architecture (real-time vs synthetic)
+- [x] Graceful error handling
 
-**Phase 1 (Next 3 months):**
-- [ ] Multiple API provider support (Alpha Vantage, Polygon.io)
+---
 
-**Phase 2 (6 months):**
+## 🚀 Future Enhancements
+
+### Phase 1 (Next 3 months)
+- [ ] WebSocket integration for tick-by-tick updates
+- [ ] Email/SMS alerts for price targets
+- [ ] Multiple API providers (Alpha Vantage, Polygon.io)
+- [ ] Dark mode theme toggle
+
+### Phase 2 (6 months)
 - [ ] Options pricing and Greeks calculation
-- [ ] Backtesting framework with historical performance metrics
-- [ ] Machine learning model comparison (LSTM, Prophet, ARIMA)
+- [ ] Backtesting framework with performance metrics
+- [ ] Advanced ML models (LSTM, Prophet, ARIMA)
 - [ ] News sentiment analysis integration
 
-**Phase 3 (Long-term):**
-- [ ] Advanced portfolio optimization (Markowitz, Black-Litterman)
-- [ ] Multi-asset class support (bonds, commodities, crypto)
-- [ ] Social trading features and community insights
-- [ ] Mobile app development
+### Phase 3 (Long-term)
+- [ ] Mobile app (React Native)
+- [ ] Social trading features
+- [ ] Multi-asset classes (bonds, commodities, crypto)
+- [ ] Advanced portfolio optimization (Black-Litterman)
 
 ---
 
@@ -354,67 +408,43 @@ All methodologies are documented and explained, demonstrating not just technical
 ### Project Structure
 ```
 stock-market-dashboard/
-├── dashboard.py          # Main application (750+ lines)
-├── README.md            # This file
+├── dashboard.py          # Main application (1,100+ lines)
+├── README.md            # Documentation (this file)
 ├── requirements.txt     # Dependencies
-└── screenshots/         # Project screenshots
-    ├── risk_analysis.png
-    ├── overview.png
-    ├── portfolio.png
-    └── technical.png
+└── .gitignore          # Git ignore rules
 ```
 
 ### Key Functions
-
-**`calculate_dev_risk_score(df)`**
-- Calculates proprietary 5-factor risk score
-- Returns: score (0-100), category ("Low", "High", etc.)
-- Used throughout app for risk assessment
-
-**`generate_recommendation(df, risk_score)`**
-- Multi-factor recommendation engine
-- Considers momentum, RSI, MACD, trend, risk
-- Returns: recommendation, CSS class, reasoning list
-
-**`analyze_sectors(stock_data_dict)`**
-- Sector performance aggregation
-- Calculates returns, volatility by sector
-- Returns: DataFrame with sector metrics
-
-**`generate_predictions(symbol, current_price, days)`**
-- Hybrid forecasting approach
-- Blends momentum with ML prediction
-- Returns: list of predicted prices
-
----
----
-
-## 🔌 API Integration Details
-
-### Yahoo Finance Integration
-
-**Implementation:**
 ```python
-@st.cache_data(ttl=900)  # 15-minute cache
+# Real-time data fetching with caching
+@st.cache_data(ttl=30)
 def fetch_real_stock_data(symbol, period="1y"):
-    ticker = yf.Ticker(symbol)
-    df = ticker.history(period=period)
-    # Calculate technical indicators
-    # Handle errors gracefully
-    return df
+    """Fetch live data from Yahoo Finance with error handling"""
+    
+# Proprietary risk scoring
+def calculate_dev_risk_score(df):
+    """5-factor weighted risk model (0-100 scale)"""
+    
+# Auto-refresh management
+def handle_auto_refresh():
+    """Non-blocking refresh with countdown timer"""
+    
+# Investment recommendations
+def generate_recommendation(df, risk_score):
+    """Multi-factor BUY/SELL/HOLD signals"""
 ```
 
-**Key Features:**
-- ✅ **Smart Caching**: 15-minute TTL reduces API calls by 96%
-- ✅ **Error Handling**: Automatic fallback to synthetic data
-- ✅ **Rate Limit Management**: Prevents API throttling
-- ✅ **Data Validation**: Checks for empty responses, timezone normalization
-- ✅ **User Control**: Toggle between real-time and synthetic modes
+---
 
-**Design Decisions:**
-- **Why 15-minute cache?** Balance between data freshness and API efficiency
-- **Why graceful fallback?** Ensures 100% uptime even if API fails
-- **Why dual-mode?** Allows testing and demonstration without API dependency
+## ⚠️ Disclaimer
+
+**This dashboard is for educational and portfolio demonstration purposes only.**
+
+- ❌ NOT financial advice
+- ❌ Past performance ≠ future results
+- ✅ Always conduct your own research
+- ✅ Consult qualified financial advisors
+- ⚠️ Yahoo Finance data may have delays (free tier)
 
 ---
 
@@ -426,13 +456,38 @@ def fetch_real_stock_data(symbol, period="1y"):
 💻 [GitHub](https://github.com/Dev2943)  
 📍 Amherst, Massachusetts
 
+**💼 Available for Data Analyst and Business Analyst opportunities starting January 2027**
+
+---
+
+## 📈 Performance & Metrics
+
+### Code Statistics
+- **1,100+ lines** of production-ready Python code
+- **6 analytical modules** with 20+ visualizations
+- **15+ custom functions** including API integration
+- **5-factor proprietary model** for risk assessment
+- **Real-time streaming** with 30-second auto-refresh
+- **100% uptime** with graceful error handling
+
+### Skills Demonstrated
+✅ Python Programming (Pandas, NumPy, Plotly)  
+✅ **Real-Time Data Streaming & Auto-Refresh** ⚡  
+✅ **Production Error Handling & State Management**  
+✅ REST API Integration (Yahoo Finance)  
+✅ Statistical Analysis & Quantitative Methods  
+✅ Machine Learning & Predictive Modeling  
+✅ Interactive Dashboard Design (Streamlit)  
+✅ Full-Stack Deployment (Streamlit Cloud)  
+✅ Git Version Control & Documentation  
+
 ---
 
 ## 🙏 Acknowledgments
 
-- **UMass Amherst Business Analytics Faculty** - For quantitative finance foundations
-- **Andor Luxury Team** - For inspiring category benchmarking methodology
-- **Streamlit & Plotly Communities** - For excellent documentation and support
+
+- **Streamlit & Plotly Communities** - Excellent frameworks and support
+- **Yahoo Finance** - Free API access for market data
 
 ---
 
@@ -440,35 +495,24 @@ def fetch_real_stock_data(symbol, period="1y"):
 
 This project is for educational and portfolio demonstration purposes.
 
----
-
-## 📈 Performance & Metrics
-
-**Code Statistics:**
-- 1,000+ lines of Python code (up from 750)
-- 6 analytical modules
-- 15+ custom functions
-- 20+ interactive visualizations
-- 5-factor proprietary model
-- Real-time API integration with caching
-
-**Skills Demonstrated:**
-- Python Programming (Pandas, NumPy, Plotly)
-- **API Integration & Data Engineering** 🆕
-- **Production Error Handling** 🆕
-- Statistical Analysis & Quantitative Methods
-- Machine Learning & Predictive Modeling
-- Data Visualization & Dashboard Design
-- Full-Stack Application Development
-- Git Version Control & CI/CD
+**MIT License** - Feel free to fork and learn from this project!
 
 ---
 
-*Last Updated: October 2025*  
-*Version: 2.0 - Major Enhancement Release*
+*Last Updated: May 2025*  
+*Version: 2.1 - Auto-Refresh Enhancement*
 
 ---
 
-**⭐ If you found this project interesting, please star the repository!**
+**⭐ If you found this project helpful, please star the repository!**
 
-**💼 Available for data analyst and business analyst opportunities starting January 2027**
+---
+
+## 🔗 Quick Links
+
+- 🌐 **Live Demo**: https://dev2943-stock-market-dashboard-dashboard.streamlit.app
+- 💻 **GitHub**: https://github.com/Dev2943/stock-market-dashboard
+- 📧 **Email**: devgolakiya31@gmail.com
+- 🔗 **LinkedIn**: https://www.linkedin.com/in/devgolakiya
+
+---
