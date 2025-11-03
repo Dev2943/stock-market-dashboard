@@ -171,10 +171,12 @@ def generate_stock_data(symbol, days=252):
     df['BB_lower'] = df['BB_middle'] - (bb_std * 2)
     
     return df
-@st.cache_data(ttl=900)  # Cache for 15 minutes
+@st.cache_data(ttl=30)  # 30 seconds - fastest safe option
 def fetch_real_stock_data(symbol, period="1y"):
     """
     Fetch real-time stock data from Yahoo Finance
+    Cache expires every 30 seconds for near-real-time updates
+
     
     Args:
         symbol: Stock ticker (e.g., 'AAPL')
@@ -363,22 +365,47 @@ def analyze_sectors(stock_data_dict):
     return pd.DataFrame(summary).sort_values('Avg Return (20d)', ascending=False)
 
 @st.cache_data
+@st.cache_data
 def generate_predictions(symbol, current_price, days=30):
-    """ML-inspired price prediction with confidence intervals"""
+    """
+    Generate realistic price predictions based on historical volatility
+    
+    Args:
+        symbol: Stock ticker
+        current_price: Current stock price
+        days: Number of days to predict
+    
+    Returns:
+        List of predicted prices
+    """
     np.random.seed(hash(symbol) % 1000)
-    trend = np.random.normal(0.001, 0.002)
+    
+    # More realistic parameters
+    # Annual drift (expected return): 8-12% annually = 0.025-0.035% daily
+    annual_return = 0.10  # 10% annual expected return
+    daily_drift = annual_return / 252  # Convert to daily
+    
+    # Daily volatility: realistic range 1-3%
+    daily_volatility = 0.015  # 1.5% daily volatility
+    
     predictions = []
-    base_price = current_price
+    price = current_price
     
     for day in range(1, days + 1):
-        daily_change = trend + np.random.normal(0, 0.015)
+        # Random walk with drift (more realistic model)
+        daily_return = np.random.normal(daily_drift, daily_volatility)
         
-        # Mean reversion after day 10
+        # Add mean reversion (prevents wild swings)
         if day > 10:
-            reversion = (base_price - (base_price * (1 + trend * day))) * 0.1
-            daily_change += reversion / base_price
+            # Pull back toward starting price slightly
+            deviation = (price - current_price) / current_price
+            mean_reversion = -0.1 * deviation  # 10% mean reversion
+            daily_return += mean_reversion
         
-        price = base_price * (1 + daily_change * day)
+        # Cap maximum daily moves at ±5%
+        daily_return = np.clip(daily_return, -0.05, 0.05)
+        
+        price = price * (1 + daily_return)
         predictions.append(price)
     
     return predictions
@@ -643,14 +670,53 @@ def main():
     use_real_data = st.sidebar.radio(
         "Select data source:",
         options=["Real-Time (Yahoo Finance)", "Synthetic (Simulated)"],
-        index=0,  # Default to real-time
+        index=0,
         help="Real-time data is fetched from Yahoo Finance. Synthetic data is generated for demonstration."
     )
     
-    # Show data info
+    # Add refresh button
     if use_real_data == "Real-Time (Yahoo Finance)":
         st.sidebar.success("✅ Using live market data")
-        st.sidebar.caption("Data refreshes every 15 minutes")
+        st.sidebar.caption("⚡ Data refreshes automatically")
+        
+        # Initialize session state for auto-refresh
+        if 'last_refresh_time' not in st.session_state:
+            st.session_state.last_refresh_time = datetime.now()
+        if 'refresh_counter' not in st.session_state:
+            st.session_state.refresh_counter = 0
+        
+        # Calculate time since last refresh
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
+        
+        # Auto-refresh toggle
+        auto_refresh = st.sidebar.checkbox(
+            "🔄 Auto-refresh (30s)", 
+            value=False,
+            help="Automatically reload data every 30 seconds",
+            key='auto_refresh_toggle'
+        )
+        
+        # Show countdown and handle auto-refresh
+        if auto_refresh:
+            time_remaining = max(0, 30 - int(time_since_refresh))
+            st.sidebar.info(f"⏱️ Next refresh in: {time_remaining}s")
+            
+            # Only rerun when timer reaches 0
+            if time_since_refresh >= 30:
+                st.session_state.last_refresh_time = datetime.now()
+                st.session_state.refresh_counter += 1
+                st.cache_data.clear()
+                st.rerun()
+        
+        # Manual refresh button
+        if st.sidebar.button("🔄 Force Refresh Now", help="Fetch latest data immediately"):
+            st.session_state.last_refresh_time = datetime.now()
+            st.session_state.refresh_counter += 1
+            st.cache_data.clear()
+            st.rerun()
+        
+        # Show refresh stats
+        st.sidebar.caption(f"🔄 Refreshes: {st.session_state.refresh_counter} | Last: {st.session_state.last_refresh_time.strftime('%I:%M:%S %p')}")
     else:
         st.sidebar.info("📊 Using simulated data")
         st.sidebar.caption("Based on realistic statistical patterns")
@@ -682,16 +748,29 @@ def main():
         with st.spinner("📊 Generating synthetic data..."):
             for stock in selected_stocks:
                 stock_data[stock] = generate_stock_data(stock, data_period)
-
-
+    
+    # Display last update timestamp for real-time data
+    if use_real_data == "Real-Time (Yahoo Finance)" and stock_data:
+        sample_stock = list(stock_data.keys())[0]
+        sample_df = stock_data[sample_stock]
+        if len(sample_df) > 0:
+            last_market_date = sample_df.index[-1]
+            current_time = datetime.now()
+            
+            st.caption(f"📅 **Market data as of:** {last_market_date.strftime('%B %d, %Y')} | "
+                      f"**Last fetched:** {current_time.strftime('%I:%M:%S %p')}")
+    
     # Show data source indicator
     st.markdown("---")
     if use_real_data == "Real-Time (Yahoo Finance)":
-        st.info("📡 **Live Data Mode** - Real-time market data from Yahoo Finance | Updates every 15 minutes")
+        st.info("📡 **Live Data Mode** - Real-time market data from Yahoo Finance | ⚡ Updates every 30 seconds")
     else:
         st.info("📊 **Simulation Mode** - Synthetic data based on statistical modeling")
-        
+    
     detail_stock = st.selectbox("🔍 Select stock for detailed analysis:", selected_stocks, index=0)
+        
+
+
     df = stock_data[detail_stock]
     current_price = df['Close'].iloc[-1]
     
