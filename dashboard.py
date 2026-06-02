@@ -1073,7 +1073,7 @@ def main():
         
         # Monthly returns heatmap
         st.subheader("📅 Monthly Returns Heatmap")
-        monthly_returns = df['Returns'].resample('M').apply(lambda x: (1 + x).prod() - 1)
+        monthly_returns = df['Returns'].resample('ME').apply(lambda x: (1 + x).prod() - 1)
         monthly_df = pd.DataFrame({
             'Year': monthly_returns.index.year,
             'Month': monthly_returns.index.month,
