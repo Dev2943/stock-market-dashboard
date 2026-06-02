@@ -823,67 +823,70 @@ def build_vol_smile(df, K_range=0.15, n_strikes=20):
 # PROJECT 3 — Factor Model & Momentum
 # ─────────────────────────────────────────────
 
-def calculate_factor_exposures(df, market_df=None):
-    """Estimate Fama-French style factor exposures via OLS."""
+@st.cache_data(ttl=3600)
+def fetch_factor_proxies(period="2y"):
+    """
+    Fetch independent factor proxy ETFs from Yahoo Finance.
+    These are INDEPENDENT of the stock being analysed — that's the key fix.
+      MKT  → SPY  (broad market)
+      SMB  → IWM - SPY  (small minus large)
+      HML  → IVE - IVW  (value minus growth)
+      MOM  → MTUM       (momentum ETF)
+    """
+    tickers = ['SPY', 'IWM', 'IVE', 'IVW', 'MTUM']
+    try:
+        raw = yf.download(tickers, period=period, auto_adjust=True, progress=False)['Close']
+        factors = pd.DataFrame(index=raw.index)
+        factors['MKT']  = raw['SPY'].pct_change()
+        factors['SMB']  = raw['IWM'].pct_change() - raw['SPY'].pct_change()
+        factors['HML']  = raw['IVE'].pct_change() - raw['IVW'].pct_change()
+        factors['MOM']  = raw['MTUM'].pct_change()
+        factors['RF']   = 0.045 / 252
+        return factors.dropna()
+    except Exception:
+        return None
+
+def calculate_factor_exposures(df, period="2y"):
+    """OLS regression of stock excess returns on 4 independent factors."""
     returns = df['Returns'].dropna()
     if len(returns) < 60:
         return None
 
-    # Proxy factors from the stock's own data when FF data unavailable
-    r_f  = 0.045 / 252  # daily risk-free
-    mkt  = returns - r_f
-
-    # SMB proxy: small-cap premium (negative for large caps)
-    vol_proxy = returns.rolling(20).std()
-    smb_proxy = -vol_proxy.fillna(0) * 0.5
-
-    # HML proxy: value factor (based on price vs 200-day MA)
-    sma200 = df['Close'].rolling(200).mean()
-    hml_proxy = ((sma200 - df['Close']) / sma200).fillna(0)
-
-    # MOM proxy: 12-1 month momentum
-    if len(df) >= 252:
-        mom_proxy = df['Close'].pct_change(231).shift(21).fillna(0)
-    else:
-        mom_proxy = df['Close'].pct_change(60).shift(5).fillna(0)
-
-    # Align all series
-    factor_df = pd.DataFrame({
-        'excess_return': returns - r_f,
-        'mkt': mkt,
-        'smb': smb_proxy,
-        'hml': hml_proxy,
-        'mom': mom_proxy,
-    }).dropna()
-
-    if len(factor_df) < 30:
+    factors = fetch_factor_proxies(period)
+    if factors is None or len(factors) < 60:
         return None
 
-    from numpy.linalg import lstsq
+    # Align on common dates
+    aligned = pd.DataFrame({'stock': returns}).join(factors, how='inner').dropna()
+    if len(aligned) < 60:
+        return None
+
+    y = (aligned['stock'] - aligned['RF']).values
     X = np.column_stack([
-        np.ones(len(factor_df)),
-        factor_df['mkt'],
-        factor_df['smb'],
-        factor_df['hml'],
-        factor_df['mom'],
+        np.ones(len(aligned)),
+        aligned['MKT'].values,
+        aligned['SMB'].values,
+        aligned['HML'].values,
+        aligned['MOM'].values,
     ])
-    y = factor_df['excess_return'].values
+
+    from numpy.linalg import lstsq
     coeffs, _, _, _ = lstsq(X, y, rcond=None)
     alpha, beta, smb, hml, mom = coeffs
 
-    # R-squared
     y_pred = X @ coeffs
     ss_res = np.sum((y - y_pred) ** 2)
     ss_tot = np.sum((y - y.mean()) ** 2)
-    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+    r2 = max(0.0, 1 - ss_res / ss_tot) if ss_tot > 0 else 0
 
     return {
-        'alpha': alpha * 252 * 100,  # annualised %
+        'alpha': alpha * 252 * 100,
         'beta':  beta,
         'smb':   smb,
         'hml':   hml,
         'mom':   mom,
         'r2':    r2,
+        'n_obs': len(aligned),
     }
 
 def calculate_momentum_signal(df):
@@ -1822,7 +1825,7 @@ def main():
         st.caption("Methodology from Project 3 — Fama-French factor exposures, 12-1 momentum signal, long/short backtest")
 
         st.subheader("📊 Fama-French Factor Exposures")
-        exposures = calculate_factor_exposures(df)
+        exposures = calculate_factor_exposures(df, period="2y")
 
         if exposures:
             col1, col2 = st.columns([1, 1])
@@ -1841,6 +1844,7 @@ def main():
                           help="Positive = trend-following; negative = mean-reverting.")
                 e2.metric("R² (explained)",        f"{exposures['r2']:.2%}",
                           help="% of return variation explained by the 4 factors.")
+                st.caption(f"Regression on {exposures.get('n_obs', '—')} daily observations | Factors: SPY (MKT), IWM−SPY (SMB), IVE−IVW (HML), MTUM (MOM)")
 
             with col2:
                 # Factor exposure bar chart
