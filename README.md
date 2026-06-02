@@ -5,7 +5,7 @@
 
 An advanced, production-ready stock market analysis dashboard featuring proprietary risk assessment, real-time data streaming, sector rotation analysis, and ML-powered forecasting. Built to demonstrate business analytics expertise and data-driven investment insights.
 
-🔗 **Live Demo:** https://dev2943-stock-market-dashboard-dashboard.streamlit.app  
+🔗 **Live Demo:** https://stock-market-dashboard-909492874362.us-central1.run.app
 💻 **GitHub:** https://github.com/Dev2943/stock-market-dashboard
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org)
