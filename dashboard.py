@@ -634,7 +634,7 @@ def create_stock_chart(df, symbol):
 # PROJECT 4 — VaR & Expected Shortfall
 # ─────────────────────────────────────────────
 
-def calculate_var_es(returns, confidence=0.99, window=500):
+def calculate_var_es(returns, confidence=0.99, window=200):
     """Calculate VaR and ES using three methods."""
     results = {}
     portfolio_value = 100_000
@@ -668,7 +668,7 @@ def calculate_var_es(returns, confidence=0.99, window=500):
 
     return results
 
-def run_backtest_var(returns, confidence=0.99, window=500):
+def run_backtest_var(returns, confidence=0.99, window=200):
     """Rolling VaR backtest — returns exception data."""
     r = returns.dropna()
     portfolio_value = 100_000
@@ -690,6 +690,8 @@ def run_backtest_var(returns, confidence=0.99, window=500):
         exceptions['Gaussian'].append(1 if actual < gc_threshold else 0)
 
     total = len(dates)
+    if total == 0:
+        return pd.Series(dtype=float), {'Historical': 0.0, 'Gaussian': 0.0}
     exc_rates = {k: sum(v) / total * 100 for k, v in exceptions.items()}
     return pd.Series(exceptions['Historical'], index=dates), exc_rates
 
