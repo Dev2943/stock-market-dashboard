@@ -20,6 +20,82 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 import yfinance as yf
+import time
+import logging
+from contextlib import contextmanager
+
+# Lightweight performance instrumentation. Flip to False to strip out all
+# timing/cache-tracking overhead and hide the debug panel entirely.
+DEBUG_PERFORMANCE = True
+
+logging.basicConfig(level=logging.INFO)
+_timing_logger = logging.getLogger("dashboard.timing")
+
+# Reset every rerun for free: Streamlit re-executes the whole script
+# top-to-bottom on each interaction, so these module-level dicts start empty
+# every time without any explicit reset logic.
+_TIMINGS = {}
+_CACHE_STATUS = {}
+
+
+@contextmanager
+def timed(label):
+    """Accumulate elapsed wall time under `label` in _TIMINGS. True no-op when DEBUG_PERFORMANCE is off."""
+    if not DEBUG_PERFORMANCE:
+        yield
+        return
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        _TIMINGS[label] = _TIMINGS.get(label, 0.0) + (time.perf_counter() - t0)
+
+
+def _record_cache_call(label, hit):
+    """Track cache hit/miss counts for a cached fetch. No-op when DEBUG_PERFORMANCE is off."""
+    if not DEBUG_PERFORMANCE:
+        return
+    status = _CACHE_STATUS.setdefault(label, {"hits": 0, "misses": 0})
+    status["hits" if hit else "misses"] += 1
+
+
+def _log_timing_report():
+    """Log one formatted breakdown of this rerun's timings. No-op when DEBUG_PERFORMANCE is off."""
+    if not DEBUG_PERFORMANCE:
+        return
+
+    total = _TIMINGS.get("Total rerun time", 0.0)
+    section_labels = [
+        "Overview rendering", "Risk Analysis rendering", "Technical Analysis rendering",
+        "Forecast rendering", "Performance rendering", "Portfolio rendering",
+        "VaR & Stress Test rendering", "Options Pricer rendering", "Factor Model rendering",
+    ]
+    computation_labels = [
+        "Network fetch time", "Indicator calculation", "Portfolio calculations",
+        "VaR", "Monte Carlo", "Factor model",
+    ]
+
+    lines = ["Performance report:"]
+    lines.append("  Computation:")
+    for label in computation_labels:
+        seconds = _TIMINGS.get(label, 0.0)
+        pct = (seconds / total * 100) if total > 0 else 0.0
+        lines.append(f"    {label:<24} {seconds:8.4f}s  ({pct:5.1f}%)")
+
+    lines.append("  Cache hit/miss:")
+    for label, status in _CACHE_STATUS.items():
+        lines.append(f"    {label:<24} hits={status['hits']:<4} misses={status['misses']}")
+
+    lines.append("  Rendering by section:")
+    for label in section_labels:
+        seconds = _TIMINGS.get(label, 0.0)
+        pct = (seconds / total * 100) if total > 0 else 0.0
+        lines.append(f"    {label:<28} {seconds:8.4f}s  ({pct:5.1f}%)")
+
+    lines.append(f"  Total rerun time:           {total:8.4f}s")
+
+    _timing_logger.info("\n".join(lines))
+
 
 st.set_page_config(
     page_title="Stock Analysis | Dev Golakiya",
@@ -157,34 +233,35 @@ def generate_stock_data(symbol, days=252):
         })
     
     df = pd.DataFrame(data).set_index('Date')
-    
-    # Technical indicators
-    df['Returns'] = df['Close'].pct_change()
-    df['SMA_20'] = df['Close'].rolling(window=20).mean()
-    df['SMA_50'] = df['Close'].rolling(window=50).mean()
-    df['SMA_200'] = df['Close'].rolling(window=200).mean()
-    df['Volatility'] = df['Returns'].rolling(window=20).std()
-    
-    # RSI
-    delta = df['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
-    
-    # MACD
-    exp1 = df['Close'].ewm(span=12).mean()
-    exp2 = df['Close'].ewm(span=26).mean()
-    df['MACD'] = exp1 - exp2
-    df['MACD_signal'] = df['MACD'].ewm(span=9).mean()
-    df['MACD_hist'] = df['MACD'] - df['MACD_signal']
-    
-    # Bollinger Bands
-    df['BB_middle'] = df['Close'].rolling(window=20).mean()
-    bb_std = df['Close'].rolling(window=20).std()
-    df['BB_upper'] = df['BB_middle'] + (bb_std * 2)
-    df['BB_lower'] = df['BB_middle'] - (bb_std * 2)
-    
+
+    with timed("Indicator calculation"):
+        # Technical indicators
+        df['Returns'] = df['Close'].pct_change()
+        df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50).mean()
+        df['SMA_200'] = df['Close'].rolling(window=200).mean()
+        df['Volatility'] = df['Returns'].rolling(window=20).std()
+
+        # RSI
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+
+        # MACD
+        exp1 = df['Close'].ewm(span=12).mean()
+        exp2 = df['Close'].ewm(span=26).mean()
+        df['MACD'] = exp1 - exp2
+        df['MACD_signal'] = df['MACD'].ewm(span=9).mean()
+        df['MACD_hist'] = df['MACD'] - df['MACD_signal']
+
+        # Bollinger Bands
+        df['BB_middle'] = df['Close'].rolling(window=20).mean()
+        bb_std = df['Close'].rolling(window=20).std()
+        df['BB_upper'] = df['BB_middle'] + (bb_std * 2)
+        df['BB_lower'] = df['BB_middle'] - (bb_std * 2)
+
     return df
 @st.cache_data(ttl=30)  # 30 seconds - fastest safe option
 def fetch_real_stock_data(symbol, period="1y"):
@@ -200,11 +277,15 @@ def fetch_real_stock_data(symbol, period="1y"):
     Returns:
         DataFrame with OHLCV data and technical indicators
     """
+    # @st.cache_data short-circuits on a hit before this body ever runs, so
+    # reaching this line means it was a miss.
+    _record_cache_call("fetch_real_stock_data", hit=False)
     try:
         # Download real data from Yahoo Finance
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period)
-        
+        with timed("Network fetch time"):
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period=period)
+
         # Check if data was retrieved
         if df.empty:
             st.warning(f"⚠️ No data available for {symbol}. Using synthetic data as fallback.")
@@ -219,35 +300,36 @@ def fetch_real_stock_data(symbol, period="1y"):
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
         
-        # Technical indicators
-        df['Returns'] = df['Close'].pct_change()
-        df['SMA_20'] = df['Close'].rolling(window=20).mean()
-        df['SMA_50'] = df['Close'].rolling(window=50).mean()
-        df['SMA_200'] = df['Close'].rolling(window=200).mean()
-        df['Volatility'] = df['Returns'].rolling(window=20).std()
-        
-        # RSI
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['RSI'] = 100 - (100 / (1 + rs))
-        
-        # MACD
-        exp1 = df['Close'].ewm(span=12).mean()
-        exp2 = df['Close'].ewm(span=26).mean()
-        df['MACD'] = exp1 - exp2
-        df['MACD_signal'] = df['MACD'].ewm(span=9).mean()
-        df['MACD_hist'] = df['MACD'] - df['MACD_signal']
-        
-        # Bollinger Bands
-        bb_window = 20
-        bb_std = 2
-        df['BB_middle'] = df['Close'].rolling(window=bb_window).mean()
-        bb_std_dev = df['Close'].rolling(window=bb_window).std()
-        df['BB_upper'] = df['BB_middle'] + (bb_std_dev * bb_std)
-        df['BB_lower'] = df['BB_middle'] - (bb_std_dev * bb_std)
-        
+        with timed("Indicator calculation"):
+            # Technical indicators
+            df['Returns'] = df['Close'].pct_change()
+            df['SMA_20'] = df['Close'].rolling(window=20).mean()
+            df['SMA_50'] = df['Close'].rolling(window=50).mean()
+            df['SMA_200'] = df['Close'].rolling(window=200).mean()
+            df['Volatility'] = df['Returns'].rolling(window=20).std()
+
+            # RSI
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['RSI'] = 100 - (100 / (1 + rs))
+
+            # MACD
+            exp1 = df['Close'].ewm(span=12).mean()
+            exp2 = df['Close'].ewm(span=26).mean()
+            df['MACD'] = exp1 - exp2
+            df['MACD_signal'] = df['MACD'].ewm(span=9).mean()
+            df['MACD_hist'] = df['MACD'] - df['MACD_signal']
+
+            # Bollinger Bands
+            bb_window = 20
+            bb_std = 2
+            df['BB_middle'] = df['Close'].rolling(window=bb_window).mean()
+            bb_std_dev = df['Close'].rolling(window=bb_window).std()
+            df['BB_upper'] = df['BB_middle'] + (bb_std_dev * bb_std)
+            df['BB_lower'] = df['BB_middle'] - (bb_std_dev * bb_std)
+
         return df
         
     except Exception as e:
@@ -658,29 +740,31 @@ def calculate_var_es(returns, confidence=0.99, window=200):
     # Use last `window` returns
     r = returns.dropna().tail(window)
 
-    # 1. Historical Simulation
-    threshold = np.percentile(r, (1 - confidence) * 100)
-    hs_var = abs(threshold) * portfolio_value
-    hs_es  = abs(r[r <= threshold].mean()) * portfolio_value if len(r[r <= threshold]) > 0 else hs_var
-    results['Historical'] = {'VaR': hs_var, 'ES': hs_es}
+    with timed("VaR"):
+        # 1. Historical Simulation
+        threshold = np.percentile(r, (1 - confidence) * 100)
+        hs_var = abs(threshold) * portfolio_value
+        hs_es  = abs(r[r <= threshold].mean()) * portfolio_value if len(r[r <= threshold]) > 0 else hs_var
+        results['Historical'] = {'VaR': hs_var, 'ES': hs_es}
 
-    # 2. Variance-Covariance (Gaussian)
-    from scipy import stats
-    mu  = r.mean()
-    sig = r.std()
-    z   = stats.norm.ppf(1 - confidence)
-    vc_var = abs(mu + z * sig) * portfolio_value
-    phi_z  = stats.norm.pdf(-z)
-    vc_es  = (phi_z / (1 - confidence)) * sig * portfolio_value
-    results['Variance-Covariance'] = {'VaR': vc_var, 'ES': vc_es}
+        # 2. Variance-Covariance (Gaussian)
+        from scipy import stats
+        mu  = r.mean()
+        sig = r.std()
+        z   = stats.norm.ppf(1 - confidence)
+        vc_var = abs(mu + z * sig) * portfolio_value
+        phi_z  = stats.norm.pdf(-z)
+        vc_es  = (phi_z / (1 - confidence)) * sig * portfolio_value
+        results['Variance-Covariance'] = {'VaR': vc_var, 'ES': vc_es}
 
-    # 3. Monte Carlo (Gaussian)
-    np.random.seed(42)
-    sim = np.random.normal(mu, sig, 100_000)
-    mc_threshold = np.percentile(sim, (1 - confidence) * 100)
-    mc_var = abs(mc_threshold) * portfolio_value
-    mc_es  = abs(sim[sim <= mc_threshold].mean()) * portfolio_value
-    results['Monte Carlo'] = {'VaR': mc_var, 'ES': mc_es}
+    with timed("Monte Carlo"):
+        # 3. Monte Carlo (Gaussian)
+        np.random.seed(42)
+        sim = np.random.normal(mu, sig, 100_000)
+        mc_threshold = np.percentile(sim, (1 - confidence) * 100)
+        mc_var = abs(mc_threshold) * portfolio_value
+        mc_es  = abs(sim[sim <= mc_threshold].mean()) * portfolio_value
+        results['Monte Carlo'] = {'VaR': mc_var, 'ES': mc_es}
 
     return results
 
@@ -849,9 +933,13 @@ def fetch_factor_proxies(period="2y"):
       HML  → IVE - IVW  (value minus growth)
       MOM  → MTUM       (momentum ETF)
     """
+    # @st.cache_data short-circuits on a hit before this body ever runs, so
+    # reaching this line means it was a miss.
+    _record_cache_call("fetch_factor_proxies", hit=False)
     tickers = ['SPY', 'IWM', 'IVE', 'IVW', 'MTUM']
     try:
-        raw = yf.download(tickers, period=period, auto_adjust=True, progress=False)['Close']
+        with timed("Network fetch time"):
+            raw = yf.download(tickers, period=period, auto_adjust=True, progress=False)['Close']
         factors = pd.DataFrame(index=raw.index)
         factors['MKT']  = raw['SPY'].pct_change()
         factors['SMB']  = raw['IWM'].pct_change() - raw['SPY'].pct_change()
@@ -868,7 +956,14 @@ def calculate_factor_exposures(df, period="2y"):
     if len(returns) < 60:
         return None
 
+    # Cache hits skip fetch_factor_proxies' body entirely, so a hit/miss can
+    # only be inferred by diffing its miss counter around the call.
+    _misses_before = _CACHE_STATUS.get("fetch_factor_proxies", {}).get("misses", 0)
     factors = fetch_factor_proxies(period)
+    _misses_after = _CACHE_STATUS.get("fetch_factor_proxies", {}).get("misses", 0)
+    if _misses_after == _misses_before:
+        _record_cache_call("fetch_factor_proxies", hit=True)
+
     if factors is None or len(factors) < 60:
         return None
 
@@ -1046,7 +1141,32 @@ def main():
     
     st.sidebar.markdown("---")
     st.sidebar.info("💡 **About**: This dashboard uses proprietary risk scoring and sector analysis methodologies developed during my MS in Business Analytics at UMass Amherst.")
-    
+
+    # Fully gated on DEBUG_PERFORMANCE: when off, this checkbox/expander
+    # doesn't render at all, so the flag is a genuine kill switch.
+    if DEBUG_PERFORMANCE:
+        st.sidebar.markdown("---")
+        show_perf = st.sidebar.checkbox("⏱️ Show performance breakdown", value=False)
+        if show_perf:
+            with st.sidebar.expander("⏱️ Performance", expanded=False):
+                st.caption("Shows the previous completed run — not this one.")
+                last_timings = st.session_state.get('last_timings', {})
+                last_cache_status = st.session_state.get('last_cache_status', {})
+                if last_timings:
+                    timing_rows = sorted(last_timings.items(), key=lambda kv: kv[1], reverse=True)
+                    st.dataframe(
+                        pd.DataFrame(timing_rows, columns=['Section', 'Seconds']),
+                        use_container_width=True, hide_index=True
+                    )
+                if last_cache_status:
+                    cache_rows = [
+                        {'Function': k, 'Hits': v['hits'], 'Misses': v['misses']}
+                        for k, v in last_cache_status.items()
+                    ]
+                    st.dataframe(pd.DataFrame(cache_rows), use_container_width=True, hide_index=True)
+                if not last_timings and not last_cache_status:
+                    st.caption("No completed run yet.")
+
     if not selected_stocks:
         st.warning("⚠️ Please select at least one stock from the sidebar!")
         return
@@ -1069,7 +1189,13 @@ def main():
         
         with st.spinner("📡 Fetching real-time data from Yahoo Finance..."):
             for stock in selected_stocks:
+                # Cache hits skip fetch_real_stock_data's body entirely, so a
+                # hit/miss can only be inferred by diffing its miss counter.
+                _misses_before = _CACHE_STATUS.get("fetch_real_stock_data", {}).get("misses", 0)
                 stock_data[stock] = fetch_real_stock_data(stock, period=yf_period)
+                _misses_after = _CACHE_STATUS.get("fetch_real_stock_data", {}).get("misses", 0)
+                if _misses_after == _misses_before:
+                    _record_cache_call("fetch_real_stock_data", hit=True)
     else:
         with st.spinner("📊 Generating synthetic data..."):
             for stock in selected_stocks:
@@ -1111,849 +1237,874 @@ def main():
     ])
     
     with tab1:
-        st.header("📊 Market Overview")
+        with timed("Overview rendering"):
+            st.header("📊 Market Overview")
         
-        # Stock price cards
-        cols = st.columns(min(len(selected_stocks), 4))
-        for i, stock in enumerate(selected_stocks):
-            with cols[i % 4]:
-                sdf = stock_data[stock]
-                price = sdf['Close'].iloc[-1]
-                change = sdf['Returns'].iloc[-1] * 100 if not pd.isna(sdf['Returns'].iloc[-1]) else 0
-                color = "green" if change >= 0 else "red"
-                arrow = "↗️" if change >= 0 else "↘️"
+            # Stock price cards
+            cols = st.columns(min(len(selected_stocks), 4))
+            for i, stock in enumerate(selected_stocks):
+                with cols[i % 4]:
+                    sdf = stock_data[stock]
+                    price = sdf['Close'].iloc[-1]
+                    change = sdf['Returns'].iloc[-1] * 100 if not pd.isna(sdf['Returns'].iloc[-1]) else 0
+                    color = "green" if change >= 0 else "red"
+                    arrow = "↗️" if change >= 0 else "↘️"
                 
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h3>{stock}</h3>
+                        <h2>${price:.2f}</h2>
+                        <p style="color: {color};">{arrow} {change:+.2f}%</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+            st.markdown("---")
+        
+            # Key metrics for selected stock
+            st.subheader(f"📈 {detail_stock} - Key Metrics")
+            latest = df.iloc[-1]
+        
+            col1, col2, col3, col4, col5 = st.columns(5)
+        
+            col1.metric("💵 Price", f"${latest['Close']:.2f}")
+        
+            daily_ret = latest['Returns'] * 100 if not pd.isna(latest['Returns']) else 0
+            col2.metric("📈 Daily Change", f"{daily_ret:.2f}%", delta=f"{daily_ret:.2f}%")
+        
+            vol = latest['Volatility'] * 100 if not pd.isna(latest['Volatility']) else 0
+            col3.metric("📊 Volatility", f"{vol:.2f}%")
+        
+            volume_str = f"{latest['Volume']/1e6:.1f}M" if latest['Volume'] > 1e6 else f"{latest['Volume']/1e3:.1f}K"
+            col4.metric("📦 Volume", volume_str)
+        
+            rsi = latest['RSI'] if not pd.isna(latest['RSI']) else 50
+            col5.metric("🎯 RSI", f"{rsi:.1f}")
+        
+            st.markdown("---")
+        
+            # Sector Analysis
+            st.subheader("🏢 Sector Performance Analysis")
+            sector_df = analyze_sectors(stock_data)
+        
+            col1, col2 = st.columns([2, 1])
+        
+            with col1:
+                fig_sector = px.bar(
+                    sector_df, x='Sector', y='Avg Return (20d)',
+                    color='Avg Return (20d)',
+                    color_continuous_scale=['red', 'yellow', 'green'],
+                    title="Sector Momentum (20-Day Returns)"
+                )
+                fig_sector.update_layout(height=350)
+                st.plotly_chart(fig_sector, use_container_width=True)
+        
+            with col2:
+                st.dataframe(sector_df, use_container_width=True, height=350)
+    
+    with tab2:
+        with timed("Risk Analysis rendering"):
+            st.header(f"🎯 Risk Analysis - {detail_stock}")
+        
+            # Risk Score Display
+            risk_class = "risk-score-low" if risk_score < 35 else "risk-score-medium" if risk_score < 60 else "risk-score-high"
+        
+            col1, col2 = st.columns([2, 1])
+        
+            with col1:
                 st.markdown(f"""
-                <div class="metric-card">
-                    <h3>{stock}</h3>
-                    <h2>${price:.2f}</h2>
-                    <p style="color: {color};">{arrow} {change:+.2f}%</p>
+                <div class="{risk_class}">
+                    <h2>📊 Dev's Risk Score</h2>
+                    <h1>{risk_score}/100</h1>
+                    <h3>Risk Level: {risk_category}</h3>
+                    <p style="font-size: 0.9rem; margin-top: 1rem;">
+                    Multi-factor analysis: Volatility (30%), Momentum (25%), Liquidity (20%), Technical (15%), Drawdown (10%)
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+                # Insights
+                st.markdown("### 💡 Key Insights")
+                insights = generate_insights(df, risk_score)
+        
+                if insights:
+                    for insight in insights:
+                        st.info(insight)
+                else:
+                    st.info("No specific insights available for this stock at this time.")
+        
+            with col2:
+                st.markdown("### 📈 Risk Components")
+            
+                # Component breakdown
+                vol = df['Returns'].std() * np.sqrt(252)
+                vol_score = min(vol / 0.50, 1.0) * 30
+            
+                recent_return = (df['Close'].iloc[-1] / df['Close'].iloc[-20]) - 1
+                mom_vol = df['Returns'].tail(20).std()
+                mom_score = min((abs(recent_return) * 0.5 + mom_vol * 10) * 25, 25)
+            
+                volume_cv = df['Volume'].std() / df['Volume'].mean()
+                liq_score = min(volume_cv, 1.0) * 20
+            
+                rsi_val = df['RSI'].iloc[-1] if not pd.isna(df['RSI'].iloc[-1]) else 50
+                tech_score = (abs(rsi_val - 50) / 50) * 15
+            
+                returns = df['Returns'].fillna(0)
+                cumulative = (1 + returns).cumprod()
+                running_max = cumulative.expanding().max()
+                drawdown = (cumulative - running_max) / running_max
+                dd_score = min(abs(drawdown.min()) * 2, 1.0) * 10
+            
+                components = pd.DataFrame({
+                    'Component': ['Volatility', 'Momentum', 'Liquidity', 'Technical', 'Drawdown'],
+                    'Score': [vol_score, mom_score, liq_score, tech_score, dd_score],
+                    'Weight': ['30%', '25%', '20%', '15%', '10%']
+                })
+            
+                st.dataframe(components, use_container_width=True)
+            
+                fig_comp = px.bar(components, x='Component', y='Score', 
+                                 text='Weight', title="Risk Score Breakdown")
+                fig_comp.update_traces(textposition='outside')
+                st.plotly_chart(fig_comp, use_container_width=True)
+    
+    with tab3:
+        with timed("Technical Analysis rendering"):
+            st.header(f"📈 Technical Analysis - {detail_stock}")
+            fig = create_stock_chart(df, detail_stock)
+            st.plotly_chart(fig, use_container_width=True)
+        
+            # Technical Summary
+            st.subheader("📊 Technical Indicators Summary")
+        
+            col1, col2, col3, col4 = st.columns(4)
+        
+            latest = df.iloc[-1]
+        
+            with col1:
+                rsi_val = latest['RSI'] if not pd.isna(latest['RSI']) else 50
+                rsi_signal = "🟢 Oversold" if rsi_val < 30 else "🔴 Overbought" if rsi_val > 70 else "🟡 Neutral"
+                st.metric("RSI (14)", f"{rsi_val:.1f}", delta=rsi_signal)
+        
+            with col2:
+                macd_signal = "🟢 Bullish" if latest['MACD'] > latest['MACD_signal'] else "🔴 Bearish"
+                st.metric("MACD", f"{latest['MACD']:.2f}", delta=macd_signal)
+        
+            with col3:
+                price_to_bb = ((latest['Close'] - latest['BB_lower']) / (latest['BB_upper'] - latest['BB_lower'])) * 100
+                bb_position = "Upper Band" if price_to_bb > 80 else "Lower Band" if price_to_bb < 20 else "Middle"
+                st.metric("BB Position", f"{price_to_bb:.0f}%", delta=bb_position)
+        
+            with col4:
+                trend = "🟢 Uptrend" if latest['Close'] > latest['SMA_50'] else "🔴 Downtrend"
+                st.metric("50-Day Trend", trend)
+    
+    with tab4:
+        with timed("Forecast rendering"):
+            st.header(f"🔮 Price Forecast - {detail_stock}")
+        
+            predictions = generate_predictions(detail_stock, current_price, forecast_days)
+            predicted_price = predictions[-1]
+            price_change = ((predicted_price - current_price) / current_price) * 100
+        
+            # Forecast summary
+            col1, col2, col3 = st.columns(3)
+        
+            col1.metric("Price", f"${current_price:.2f}")
+            col2.metric(f"{forecast_days}-Day Target", f"${predicted_price:.2f}")
+            col3.metric("Expected Change", f"{price_change:+.2f}%", delta=f"{price_change:+.2f}%")
+        
+            # Forecast chart
+            historical = df.tail(60)
+            last_date = df.index[-1]
+            future_dates = [last_date + timedelta(days=i) for i in range(1, forecast_days + 1)]
+        
+            fig_forecast = go.Figure()
+        
+            # Historical
+            fig_forecast.add_trace(go.Scatter(
+                x=historical.index, y=historical['Close'],
+                name='Historical', line=dict(color='blue', width=2)
+            ))
+        
+            # Prediction
+            fig_forecast.add_trace(go.Scatter(
+                x=future_dates, y=predictions,
+                name='Forecast', line=dict(color='red', dash='dash', width=3)
+            ))
+        
+            # Confidence interval
+            confidence = 0.15
+            upper = [p * (1 + confidence) for p in predictions]
+            lower = [p * (1 - confidence) for p in predictions]
+        
+            fig_forecast.add_trace(go.Scatter(
+                x=future_dates, y=upper, fill=None, mode='lines',
+                line_color='rgba(0,100,80,0)', showlegend=False
+            ))
+            fig_forecast.add_trace(go.Scatter(
+                x=future_dates, y=lower, fill='tonexty', mode='lines',
+                line_color='rgba(0,100,80,0)', name='85% Confidence',
+                fillcolor='rgba(0,100,80,0.2)'
+            ))
+        
+            fig_forecast.add_trace(go.Scatter(
+                x=[last_date], y=[current_price], mode='markers',
+                marker=dict(size=12, color='orange'), name='Current'
+            ))
+        
+            fig_forecast.update_layout(
+                title=f"{detail_stock} - {forecast_days} Day Price Forecast",
+                xaxis_title="Date", yaxis_title="Price ($)", height=500
+            )
+            st.plotly_chart(fig_forecast, use_container_width=True)
+        
+            # Forecast methodology
+            with st.expander("📖 Forecast Methodology"):
+                st.markdown("""
+                **Prediction Model:**
+                - Combines trend analysis with mean reversion principles
+                - Incorporates historical volatility patterns
+                - Applies 85% confidence intervals based on price variance
+                - Uses sector momentum for trend adjustment
+            
+                **Note:** Forecasts are for educational purposes. Past performance does not guarantee future results.
+                """)
+    
+    with tab5:
+        with timed("Performance rendering"):
+            st.header(f"📉 Performance Analysis - {detail_stock}")
+        
+            perf = calculate_performance_metrics(df)
+        
+            # Metrics
+            col1, col2, col3, col4, col5 = st.columns(5)
+        
+            total_ret = perf['total_return'] * 100
+            col1.metric("Total Return", f"{total_ret:.2f}%", delta=f"{total_ret:.2f}%")
+        
+            vol_ann = perf['volatility'] * 100
+            col2.metric("Annual Volatility", f"{vol_ann:.2f}%")
+        
+            col3.metric("Sharpe Ratio", f"{perf['sharpe_ratio']:.2f}")
+        
+            col4.metric("Sortino Ratio", f"{perf['sortino_ratio']:.2f}")
+        
+            max_dd = abs(perf['max_drawdown']) * 100
+            col5.metric("Max Drawdown", f"-{max_dd:.2f}%")
+        
+            st.markdown("---")
+        
+            # Charts
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                st.subheader("📈 Cumulative Returns")
+                returns = df['Returns'].fillna(0)
+                cumulative = (1 + returns).cumprod()
+            
+                fig_cum = go.Figure()
+                fig_cum.add_trace(go.Scatter(
+                    x=df.index, y=cumulative,
+                    name='Cumulative Returns',
+                    line=dict(color='green', width=2),
+                    fill='tonexty', fillcolor='rgba(0,255,0,0.1)'
+                ))
+                fig_cum.update_layout(
+                    title=f"{detail_stock} Cumulative Performance",
+                    xaxis_title="Date", yaxis_title="Cumulative Return", height=400
+                )
+                st.plotly_chart(fig_cum, use_container_width=True)
+        
+            with col2:
+                st.subheader("📊 Returns Distribution")
+                returns_clean = df['Returns'].dropna()
+            
+                fig_dist = go.Figure(data=[go.Histogram(
+                    x=returns_clean, nbinsx=50,
+                    marker_color='steelblue', opacity=0.7
+                )])
+                fig_dist.update_layout(
+                    title="Daily Returns Distribution",
+                    xaxis_title="Daily Return", yaxis_title="Frequency", height=400
+                )
+                st.plotly_chart(fig_dist, use_container_width=True)
+        
+            # Monthly returns heatmap
+            st.subheader("📅 Monthly Returns Heatmap")
+            monthly_returns = df['Returns'].resample('ME').apply(lambda x: (1 + x).prod() - 1)
+            monthly_df = pd.DataFrame({
+                'Year': monthly_returns.index.year,
+                'Month': monthly_returns.index.month,
+                'Return': monthly_returns.values * 100
+            })
+        
+            if len(monthly_df) > 0:
+                pivot = monthly_df.pivot(index='Month', columns='Year', values='Return')
+            
+                fig_heat = go.Figure(data=go.Heatmap(
+                    z=pivot.values,
+                    x=pivot.columns,
+                    y=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][:len(pivot)],
+                    colorscale='RdYlGn',
+                    zmid=0,
+                    text=np.round(pivot.values, 2),
+                    texttemplate='%{text}%',
+                    textfont={"size": 10}
+                ))
+                fig_heat.update_layout(
+                    title="Monthly Returns (%)", height=400,
+                    xaxis_title="Year", yaxis_title="Month"
+                )
+                st.plotly_chart(fig_heat, use_container_width=True)
+    
+    with tab6:
+        with timed("Portfolio rendering"):
+            st.header("💼 Portfolio Analysis")
+        
+            st.subheader("📊 Portfolio Holdings")
+        
+            # Portfolio construction
+            portfolio_data = []
+            total_value = 0
+
+            with timed("Portfolio calculations"):
+                for stock in selected_stocks:
+                    sdf = stock_data[stock]
+                    price = sdf['Close'].iloc[-1]
+                    shares = 100
+                    value = price * shares
+                    total_value += value
+
+                    # FIXED: Calculate expected return based on actual momentum
+                    if len(sdf) >= 30:
+                        # Use actual 30-day momentum (more realistic)
+                        momentum_30d = ((price - sdf['Close'].iloc[-30]) / sdf['Close'].iloc[-30]) * 100
+
+                        # Get prediction for validation
+                        predictions = generate_predictions(stock, price, 30)
+                        predicted_return = ((predictions[-1] - price) / price) * 100 if predictions else 0
+
+                        # Blend: 70% actual momentum, 30% prediction
+                        expected_ret = (momentum_30d * 0.7) + (predicted_return * 0.3)
+                    else:
+                        # Fallback to prediction only for insufficient data
+                        predictions = generate_predictions(stock, price, 30)
+                        expected_ret = ((predictions[-1] - price) / price) * 100 if predictions else 0
+
+                    perf = calculate_performance_metrics(sdf)
+                    risk_score_stock, _ = calculate_dev_risk_score(sdf)
+
+                    portfolio_data.append({
+                        'Stock': stock,
+                        'Sector': STOCK_SECTORS.get(stock, 'Other'),
+                        'Shares': shares,
+                        'Price': price,
+                        'Value': value,
+                        'Weight': 0,
+                        'Expected Return': expected_ret,
+                        'Risk Score': risk_score_stock,
+                        'Sharpe Ratio': perf['sharpe_ratio']
+                    })
+
+                # Calculate weights
+                for item in portfolio_data:
+                    item['Weight'] = (item['Value'] / total_value) * 100 if total_value > 0 else 0
+
+            # Create dataframe from portfolio data
+            portfolio_df = pd.DataFrame(portfolio_data)
+        
+            # Format for display
+            display_df = pd.DataFrame({
+                'Stock': portfolio_df['Stock'],
+                'Sector': portfolio_df['Sector'],
+                'Shares': portfolio_df['Shares'],
+                'Price': portfolio_df['Price'].apply(lambda x: f"${x:.2f}"),
+                'Value': portfolio_df['Value'].apply(lambda x: f"${x:,.2f}"),
+                'Weight': portfolio_df['Weight'].apply(lambda x: f"{x:.1f}%"),
+                'Expected Return': portfolio_df['Expected Return'].apply(lambda x: f"{x:+.2f}%"),
+                'Risk Score': portfolio_df['Risk Score'].apply(lambda x: f"{x:.1f}"),
+                'Sharpe Ratio': portfolio_df['Sharpe Ratio'].apply(lambda x: f"{x:.2f}")
+            })
+
+            st.dataframe(display_df, use_container_width=True)
+
+            st.markdown("---")
+        
+        
+            # Portfolio metrics
+            col1, col2, col3, col4 = st.columns(4)
+        
+            col1.metric("Total Value", f"${total_value:,.2f}")
+        
+            weighted_return = sum(p['Expected Return'] * p['Weight'] / 100 for p in portfolio_data)
+            col2.metric("Expected Return", f"{weighted_return:+.2f}%")
+        
+            avg_risk = np.mean([p['Risk Score'] for p in portfolio_data])
+            col3.metric("Avg Risk Score", f"{avg_risk:.1f}")
+        
+            avg_sharpe = np.mean([p['Sharpe Ratio'] for p in portfolio_data])
+            col4.metric("Avg Sharpe Ratio", f"{avg_sharpe:.2f}")
+        
+            # Visualizations
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                st.subheader("🥧 Portfolio Allocation")
+                fig_pie = px.pie(
+                    portfolio_df, values='Weight', names='Stock',
+                    title="Portfolio Weight Distribution",
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+        
+            with col2:
+                st.subheader("📊 Sector Allocation")
+                sector_alloc = portfolio_df.groupby('Sector')['Weight'].sum().reset_index()
+                fig_sector_pie = px.pie(
+                    sector_alloc, values='Weight', names='Sector',
+                    title="Sector Diversification",
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                st.plotly_chart(fig_sector_pie, use_container_width=True)
+        
+            st.markdown("---")
+        
+            # Investment recommendations
+            st.subheader("💡 Investment Recommendations")
+        
+            for stock in selected_stocks:
+                sdf = stock_data[stock]
+                with timed("Portfolio calculations"):
+                    risk_score_stock, risk_cat = calculate_dev_risk_score(sdf)
+                    recommendation, rec_class, reasons = generate_recommendation(sdf, risk_score_stock)
+
+                # Determine card style
+                if "buy" in rec_class:
+                    card_style = "recommendation-buy"
+                elif "sell" in rec_class:
+                    card_style = "recommendation-sell"
+                else:
+                    card_style = "recommendation-hold"
+            
+                reasons_text = " • ".join(reasons[:3]) if reasons else "Based on technical analysis"
+            
+                st.markdown(f"""
+                <div class="{card_style}">
+                    <h4>{stock}: {recommendation} (Risk: {risk_cat})</h4>
+                    <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">{reasons_text}</p>
                 </div>
                 """, unsafe_allow_html=True)
         
-        st.markdown("---")
+            # Portfolio insights
+            st.markdown("---")
+            st.subheader("🎯 Portfolio Insights")
         
-        # Key metrics for selected stock
-        st.subheader(f"📈 {detail_stock} - Key Metrics")
-        latest = df.iloc[-1]
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        col1.metric("💵 Price", f"${latest['Close']:.2f}")
-        
-        daily_ret = latest['Returns'] * 100 if not pd.isna(latest['Returns']) else 0
-        col2.metric("📈 Daily Change", f"{daily_ret:.2f}%", delta=f"{daily_ret:.2f}%")
-        
-        vol = latest['Volatility'] * 100 if not pd.isna(latest['Volatility']) else 0
-        col3.metric("📊 Volatility", f"{vol:.2f}%")
-        
-        volume_str = f"{latest['Volume']/1e6:.1f}M" if latest['Volume'] > 1e6 else f"{latest['Volume']/1e3:.1f}K"
-        col4.metric("📦 Volume", volume_str)
-        
-        rsi = latest['RSI'] if not pd.isna(latest['RSI']) else 50
-        col5.metric("🎯 RSI", f"{rsi:.1f}")
-        
-        st.markdown("---")
-        
-        # Sector Analysis
-        st.subheader("🏢 Sector Performance Analysis")
-        sector_df = analyze_sectors(stock_data)
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            fig_sector = px.bar(
-                sector_df, x='Sector', y='Avg Return (20d)',
-                color='Avg Return (20d)',
-                color_continuous_scale=['red', 'yellow', 'green'],
-                title="Sector Momentum (20-Day Returns)"
-            )
-            fig_sector.update_layout(height=350)
-            st.plotly_chart(fig_sector, use_container_width=True)
-        
-        with col2:
-            st.dataframe(sector_df, use_container_width=True, height=350)
-    
-    with tab2:
-        st.header(f"🎯 Risk Analysis - {detail_stock}")
-        
-        # Risk Score Display
-        risk_class = "risk-score-low" if risk_score < 35 else "risk-score-medium" if risk_score < 60 else "risk-score-high"
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.markdown(f"""
-            <div class="{risk_class}">
-                <h2>📊 Dev's Risk Score</h2>
-                <h1>{risk_score}/100</h1>
-                <h3>Risk Level: {risk_category}</h3>
-                <p style="font-size: 0.9rem; margin-top: 1rem;">
-                Multi-factor analysis: Volatility (30%), Momentum (25%), Liquidity (20%), Technical (15%), Drawdown (10%)
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Insights
-            st.markdown("### 💡 Key Insights")
-            insights = generate_insights(df, risk_score)
-        
-            if insights:
-                for insight in insights:
-                    st.info(insight)
-            else:
-                st.info("No specific insights available for this stock at this time.")
-        
-        with col2:
-            st.markdown("### 📈 Risk Components")
-            
-            # Component breakdown
-            vol = df['Returns'].std() * np.sqrt(252)
-            vol_score = min(vol / 0.50, 1.0) * 30
-            
-            recent_return = (df['Close'].iloc[-1] / df['Close'].iloc[-20]) - 1
-            mom_vol = df['Returns'].tail(20).std()
-            mom_score = min((abs(recent_return) * 0.5 + mom_vol * 10) * 25, 25)
-            
-            volume_cv = df['Volume'].std() / df['Volume'].mean()
-            liq_score = min(volume_cv, 1.0) * 20
-            
-            rsi_val = df['RSI'].iloc[-1] if not pd.isna(df['RSI'].iloc[-1]) else 50
-            tech_score = (abs(rsi_val - 50) / 50) * 15
-            
-            returns = df['Returns'].fillna(0)
-            cumulative = (1 + returns).cumprod()
-            running_max = cumulative.expanding().max()
-            drawdown = (cumulative - running_max) / running_max
-            dd_score = min(abs(drawdown.min()) * 2, 1.0) * 10
-            
-            components = pd.DataFrame({
-                'Component': ['Volatility', 'Momentum', 'Liquidity', 'Technical', 'Drawdown'],
-                'Score': [vol_score, mom_score, liq_score, tech_score, dd_score],
-                'Weight': ['30%', '25%', '20%', '15%', '10%']
+            # Correlation analysis
+            returns_matrix = pd.DataFrame({
+                stock: stock_data[stock]['Returns'] for stock in selected_stocks
             })
+            corr_matrix = returns_matrix.corr()
+            avg_corr = corr_matrix.values[np.triu_indices_from(corr_matrix.values, k=1)].mean()
+        
+            diversification_score = (1 - avg_corr) * 100
+        
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                div_emoji = "🟢" if diversification_score > 60 else "🟡" if diversification_score > 40 else "🔴"
             
-            st.dataframe(components, use_container_width=True)
-            
-            fig_comp = px.bar(components, x='Component', y='Score', 
-                             text='Weight', title="Risk Score Breakdown")
-            fig_comp.update_traces(textposition='outside')
-            st.plotly_chart(fig_comp, use_container_width=True)
-    
-    with tab3:
-        st.header(f"📈 Technical Analysis - {detail_stock}")
-        fig = create_stock_chart(df, detail_stock)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Technical Summary
-        st.subheader("📊 Technical Indicators Summary")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        latest = df.iloc[-1]
-        
-        with col1:
-            rsi_val = latest['RSI'] if not pd.isna(latest['RSI']) else 50
-            rsi_signal = "🟢 Oversold" if rsi_val < 30 else "🔴 Overbought" if rsi_val > 70 else "🟡 Neutral"
-            st.metric("RSI (14)", f"{rsi_val:.1f}", delta=rsi_signal)
-        
-        with col2:
-            macd_signal = "🟢 Bullish" if latest['MACD'] > latest['MACD_signal'] else "🔴 Bearish"
-            st.metric("MACD", f"{latest['MACD']:.2f}", delta=macd_signal)
-        
-        with col3:
-            price_to_bb = ((latest['Close'] - latest['BB_lower']) / (latest['BB_upper'] - latest['BB_lower'])) * 100
-            bb_position = "Upper Band" if price_to_bb > 80 else "Lower Band" if price_to_bb < 20 else "Middle"
-            st.metric("BB Position", f"{price_to_bb:.0f}%", delta=bb_position)
-        
-        with col4:
-            trend = "🟢 Uptrend" if latest['Close'] > latest['SMA_50'] else "🔴 Downtrend"
-            st.metric("50-Day Trend", trend)
-    
-    with tab4:
-        st.header(f"🔮 Price Forecast - {detail_stock}")
-        
-        predictions = generate_predictions(detail_stock, current_price, forecast_days)
-        predicted_price = predictions[-1]
-        price_change = ((predicted_price - current_price) / current_price) * 100
-        
-        # Forecast summary
-        col1, col2, col3 = st.columns(3)
-        
-        col1.metric("Price", f"${current_price:.2f}")
-        col2.metric(f"{forecast_days}-Day Target", f"${predicted_price:.2f}")
-        col3.metric("Expected Change", f"{price_change:+.2f}%", delta=f"{price_change:+.2f}%")
-        
-        # Forecast chart
-        historical = df.tail(60)
-        last_date = df.index[-1]
-        future_dates = [last_date + timedelta(days=i) for i in range(1, forecast_days + 1)]
-        
-        fig_forecast = go.Figure()
-        
-        # Historical
-        fig_forecast.add_trace(go.Scatter(
-            x=historical.index, y=historical['Close'],
-            name='Historical', line=dict(color='blue', width=2)
-        ))
-        
-        # Prediction
-        fig_forecast.add_trace(go.Scatter(
-            x=future_dates, y=predictions,
-            name='Forecast', line=dict(color='red', dash='dash', width=3)
-        ))
-        
-        # Confidence interval
-        confidence = 0.15
-        upper = [p * (1 + confidence) for p in predictions]
-        lower = [p * (1 - confidence) for p in predictions]
-        
-        fig_forecast.add_trace(go.Scatter(
-            x=future_dates, y=upper, fill=None, mode='lines',
-            line_color='rgba(0,100,80,0)', showlegend=False
-        ))
-        fig_forecast.add_trace(go.Scatter(
-            x=future_dates, y=lower, fill='tonexty', mode='lines',
-            line_color='rgba(0,100,80,0)', name='85% Confidence',
-            fillcolor='rgba(0,100,80,0.2)'
-        ))
-        
-        fig_forecast.add_trace(go.Scatter(
-            x=[last_date], y=[current_price], mode='markers',
-            marker=dict(size=12, color='orange'), name='Current'
-        ))
-        
-        fig_forecast.update_layout(
-            title=f"{detail_stock} - {forecast_days} Day Price Forecast",
-            xaxis_title="Date", yaxis_title="Price ($)", height=500
-        )
-        st.plotly_chart(fig_forecast, use_container_width=True)
-        
-        # Forecast methodology
-        with st.expander("📖 Forecast Methodology"):
-            st.markdown("""
-            **Prediction Model:**
-            - Combines trend analysis with mean reversion principles
-            - Incorporates historical volatility patterns
-            - Applies 85% confidence intervals based on price variance
-            - Uses sector momentum for trend adjustment
-            
-            **Note:** Forecasts are for educational purposes. Past performance does not guarantee future results.
-            """)
-    
-    with tab5:
-        st.header(f"📉 Performance Analysis - {detail_stock}")
-        
-        perf = calculate_performance_metrics(df)
-        
-        # Metrics
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        total_ret = perf['total_return'] * 100
-        col1.metric("Total Return", f"{total_ret:.2f}%", delta=f"{total_ret:.2f}%")
-        
-        vol_ann = perf['volatility'] * 100
-        col2.metric("Annual Volatility", f"{vol_ann:.2f}%")
-        
-        col3.metric("Sharpe Ratio", f"{perf['sharpe_ratio']:.2f}")
-        
-        col4.metric("Sortino Ratio", f"{perf['sortino_ratio']:.2f}")
-        
-        max_dd = abs(perf['max_drawdown']) * 100
-        col5.metric("Max Drawdown", f"-{max_dd:.2f}%")
-        
-        st.markdown("---")
-        
-        # Charts
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📈 Cumulative Returns")
-            returns = df['Returns'].fillna(0)
-            cumulative = (1 + returns).cumprod()
-            
-            fig_cum = go.Figure()
-            fig_cum.add_trace(go.Scatter(
-                x=df.index, y=cumulative,
-                name='Cumulative Returns',
-                line=dict(color='green', width=2),
-                fill='tonexty', fillcolor='rgba(0,255,0,0.1)'
-            ))
-            fig_cum.update_layout(
-                title=f"{detail_stock} Cumulative Performance",
-                xaxis_title="Date", yaxis_title="Cumulative Return", height=400
-            )
-            st.plotly_chart(fig_cum, use_container_width=True)
-        
-        with col2:
-            st.subheader("📊 Returns Distribution")
-            returns_clean = df['Returns'].dropna()
-            
-            fig_dist = go.Figure(data=[go.Histogram(
-                x=returns_clean, nbinsx=50,
-                marker_color='steelblue', opacity=0.7
-            )])
-            fig_dist.update_layout(
-                title="Daily Returns Distribution",
-                xaxis_title="Daily Return", yaxis_title="Frequency", height=400
-            )
-            st.plotly_chart(fig_dist, use_container_width=True)
-        
-        # Monthly returns heatmap
-        st.subheader("📅 Monthly Returns Heatmap")
-        monthly_returns = df['Returns'].resample('ME').apply(lambda x: (1 + x).prod() - 1)
-        monthly_df = pd.DataFrame({
-            'Year': monthly_returns.index.year,
-            'Month': monthly_returns.index.month,
-            'Return': monthly_returns.values * 100
-        })
-        
-        if len(monthly_df) > 0:
-            pivot = monthly_df.pivot(index='Month', columns='Year', values='Return')
-            
-            fig_heat = go.Figure(data=go.Heatmap(
-                z=pivot.values,
-                x=pivot.columns,
-                y=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][:len(pivot)],
-                colorscale='RdYlGn',
-                zmid=0,
-                text=np.round(pivot.values, 2),
-                texttemplate='%{text}%',
-                textfont={"size": 10}
-            ))
-            fig_heat.update_layout(
-                title="Monthly Returns (%)", height=400,
-                xaxis_title="Year", yaxis_title="Month"
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
-    
-    with tab6:
-        st.header("💼 Portfolio Analysis")
-        
-        st.subheader("📊 Portfolio Holdings")
-        
-        # Portfolio construction
-        portfolio_data = []
-        total_value = 0
-        
-        for stock in selected_stocks:
-            sdf = stock_data[stock]
-            price = sdf['Close'].iloc[-1]
-            shares = 100
-            value = price * shares
-            total_value += value
-            
-            # FIXED: Calculate expected return based on actual momentum
-            if len(sdf) >= 30:
-                # Use actual 30-day momentum (more realistic)
-                momentum_30d = ((price - sdf['Close'].iloc[-30]) / sdf['Close'].iloc[-30]) * 100
-                
-                # Get prediction for validation
-                predictions = generate_predictions(stock, price, 30)
-                predicted_return = ((predictions[-1] - price) / price) * 100 if predictions else 0
-                
-                # Blend: 70% actual momentum, 30% prediction
-                expected_ret = (momentum_30d * 0.7) + (predicted_return * 0.3)
-            else:
-                # Fallback to prediction only for insufficient data
-                predictions = generate_predictions(stock, price, 30)
-                expected_ret = ((predictions[-1] - price) / price) * 100 if predictions else 0
-            
-            perf = calculate_performance_metrics(sdf)
-            risk_score_stock, _ = calculate_dev_risk_score(sdf)
-            
-            portfolio_data.append({
-                'Stock': stock,
-                'Sector': STOCK_SECTORS.get(stock, 'Other'),
-                'Shares': shares,
-                'Price': price,
-                'Value': value,
-                'Weight': 0,
-                'Expected Return': expected_ret,
-                'Risk Score': risk_score_stock,
-                'Sharpe Ratio': perf['sharpe_ratio']
-            })
-        
-        # Calculate weights
-        for item in portfolio_data:
-            item['Weight'] = (item['Value'] / total_value) * 100 if total_value > 0 else 0
-        
-        # Create dataframe from portfolio data
-        portfolio_df = pd.DataFrame(portfolio_data)
-        
-        # Format for display
-        display_df = pd.DataFrame({
-            'Stock': portfolio_df['Stock'],
-            'Sector': portfolio_df['Sector'],
-            'Shares': portfolio_df['Shares'],
-            'Price': portfolio_df['Price'].apply(lambda x: f"${x:.2f}"),
-            'Value': portfolio_df['Value'].apply(lambda x: f"${x:,.2f}"),
-            'Weight': portfolio_df['Weight'].apply(lambda x: f"{x:.1f}%"),
-            'Expected Return': portfolio_df['Expected Return'].apply(lambda x: f"{x:+.2f}%"),
-            'Risk Score': portfolio_df['Risk Score'].apply(lambda x: f"{x:.1f}"),
-            'Sharpe Ratio': portfolio_df['Sharpe Ratio'].apply(lambda x: f"{x:.2f}")
-        })
-
-        st.dataframe(display_df, use_container_width=True)
-
-        st.markdown("---")
-        
-        
-        # Portfolio metrics
-        col1, col2, col3, col4 = st.columns(4)
-        
-        col1.metric("Total Value", f"${total_value:,.2f}")
-        
-        weighted_return = sum(p['Expected Return'] * p['Weight'] / 100 for p in portfolio_data)
-        col2.metric("Expected Return", f"{weighted_return:+.2f}%")
-        
-        avg_risk = np.mean([p['Risk Score'] for p in portfolio_data])
-        col3.metric("Avg Risk Score", f"{avg_risk:.1f}")
-        
-        avg_sharpe = np.mean([p['Sharpe Ratio'] for p in portfolio_data])
-        col4.metric("Avg Sharpe Ratio", f"{avg_sharpe:.2f}")
-        
-        # Visualizations
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("🥧 Portfolio Allocation")
-            fig_pie = px.pie(
-                portfolio_df, values='Weight', names='Stock',
-                title="Portfolio Weight Distribution",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
-        
-        with col2:
-            st.subheader("📊 Sector Allocation")
-            sector_alloc = portfolio_df.groupby('Sector')['Weight'].sum().reset_index()
-            fig_sector_pie = px.pie(
-                sector_alloc, values='Weight', names='Sector',
-                title="Sector Diversification",
-                color_discrete_sequence=px.colors.qualitative.Pastel
-            )
-            st.plotly_chart(fig_sector_pie, use_container_width=True)
-        
-        st.markdown("---")
-        
-        # Investment recommendations
-        st.subheader("💡 Investment Recommendations")
-        
-        for stock in selected_stocks:
-            sdf = stock_data[stock]
-            risk_score_stock, risk_cat = calculate_dev_risk_score(sdf)
-            recommendation, rec_class, reasons = generate_recommendation(sdf, risk_score_stock)
-            
-            # Determine card style
-            if "buy" in rec_class:
-                card_style = "recommendation-buy"
-            elif "sell" in rec_class:
-                card_style = "recommendation-sell"
-            else:
-                card_style = "recommendation-hold"
-            
-            reasons_text = " • ".join(reasons[:3]) if reasons else "Based on technical analysis"
-            
-            st.markdown(f"""
-            <div class="{card_style}">
-                <h4>{stock}: {recommendation} (Risk: {risk_cat})</h4>
-                <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">{reasons_text}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Portfolio insights
-        st.markdown("---")
-        st.subheader("🎯 Portfolio Insights")
-        
-        # Correlation analysis
-        returns_matrix = pd.DataFrame({
-            stock: stock_data[stock]['Returns'] for stock in selected_stocks
-        })
-        corr_matrix = returns_matrix.corr()
-        avg_corr = corr_matrix.values[np.triu_indices_from(corr_matrix.values, k=1)].mean()
-        
-        diversification_score = (1 - avg_corr) * 100
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            div_emoji = "🟢" if diversification_score > 60 else "🟡" if diversification_score > 40 else "🔴"
-            
-            st.metric(
-                label=f"{div_emoji} Diversification Score",
-                value=f"{diversification_score:.1f}/100"
-            )
-            st.write(f"**Average correlation:** {avg_corr:.2f}")
-            
-            if diversification_score > 50:
-                st.success("✓ Good diversification across holdings")
-            else:
-                st.warning("⚠️ Consider adding uncorrelated assets")
-        
-        with col2:
-            risk_emoji = "🟢" if 30 < avg_risk < 60 else "🔴" if avg_risk > 60 else "🟡"
-            risk_label = "Balanced" if 30 < avg_risk < 60 else "High Risk" if avg_risk > 60 else "Conservative"
-            
-            st.metric(
-                label=f"{risk_emoji} Portfolio Risk Profile",
-                value=f"{avg_risk:.1f}/100"
-            )
-            st.write(f"**Risk Level:** {risk_label}")
-            
-            if avg_risk > 60:
-                st.info("📊 Suitable for: Growth investors")
-            elif avg_risk > 30:
-                st.info("📊 Suitable for: Moderate investors")
-            else:
-                st.info("📊 Suitable for: Conservative investors")
-        
-        # Correlation heatmap
-        st.subheader("📊 Stock Correlation Matrix")
-        corr_matrix = returns_matrix.corr()
-        
-        fig_corr = go.Figure(data=go.Heatmap(
-            z=corr_matrix.values,
-            x=corr_matrix.columns,
-            y=corr_matrix.columns,
-            colorscale='RdYlGn_r',
-            zmid=0,
-            text=np.round(corr_matrix.values, 2),
-            texttemplate='%{text}',
-            textfont={"size": 12},
-            colorbar=dict(title="Correlation")
-        ))
-        fig_corr.update_layout(
-            title="Correlation Between Holdings",
-            height=500
-        )
-        st.plotly_chart(fig_corr, use_container_width=True)
-
-    # ── TAB 7 — VaR & Stress Test ──────────────────────────────────────────
-    with tab7:
-        st.header(f"⚠️ VaR & Stress Test — {detail_stock}")
-        st.caption("Methodology from Project 4 — Historical Simulation, Variance-Covariance, Monte Carlo | Kupiec & Christoffersen backtests | 2008 GFC & 2020 COVID stress replays")
-
-        returns_var = df['Returns'].dropna()
-
-        # ── VaR / ES comparison ──
-        st.subheader("📊 VaR & Expected Shortfall (99%, 1-day, $100K portfolio)")
-        var_results = calculate_var_es(returns_var)
-
-        col1, col2, col3 = st.columns(3)
-        colors = {'Historical': '#1f77b4', 'Variance-Covariance': '#ff7f0e', 'Monte Carlo': '#2ca02c'}
-        for col, (method, vals) in zip([col1, col2, col3], var_results.items()):
-            with col:
-                st.markdown(f"**{method}**")
-                st.metric("VaR ($)", f"${vals['VaR']:,.0f}")
-                st.metric("ES ($)",  f"${vals['ES']:,.0f}")
-                st.caption(f"ES/VaR ratio: {vals['ES']/vals['VaR']:.2f}")
-
-        # Bar chart comparison
-        methods = list(var_results.keys())
-        var_vals = [var_results[m]['VaR'] for m in methods]
-        es_vals  = [var_results[m]['ES']  for m in methods]
-
-        fig_var = go.Figure()
-        fig_var.add_trace(go.Bar(name='VaR', x=methods, y=var_vals, marker_color='#1f77b4'))
-        fig_var.add_trace(go.Bar(name='ES',  x=methods, y=es_vals,  marker_color='#ff7f0e'))
-        fig_var.update_layout(
-            title="VaR vs ES by Method — Fat-tail effect: Historical > Gaussian",
-            barmode='group', height=380,
-            yaxis_title="Loss ($)", xaxis_title="Method"
-        )
-        st.plotly_chart(fig_var, use_container_width=True)
-
-        st.info(f"💡 Historical VaR is **${var_results['Historical']['VaR'] - var_results['Variance-Covariance']['VaR']:,.0f} higher** than Gaussian — direct evidence of fat tails in {detail_stock} returns.")
-
-        st.markdown("---")
-
-        # ── Backtest ──
-        st.subheader("🔁 Rolling VaR Backtest (Kupiec test)")
-        exc_series, exc_rates = run_backtest_var(returns_var)
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Historical Exception Rate", f"{exc_rates['Historical']:.2f}%", delta=f"{exc_rates['Historical']-1:.2f}% vs 1% target")
-        col2.metric("Gaussian Exception Rate",   f"{exc_rates['Gaussian']:.2f}%",   delta=f"{exc_rates['Gaussian']-1:.2f}% vs 1% target")
-        col3.metric("Target Rate (99% VaR)", "1.00%")
-
-        # Exception clusters chart
-        if len(exc_series) > 0:
-            cum_pnl = returns_var.loc[exc_series.index] * 100_000
-            fig_exc = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                                    subplot_titles=["Cumulative P&L ($)", "VaR Exceptions"],
-                                    row_heights=[0.65, 0.35], vertical_spacing=0.08)
-            fig_exc.add_trace(go.Scatter(x=cum_pnl.index, y=cum_pnl.cumsum(),
-                                         name="Cumulative P&L", line=dict(color='steelblue')), row=1, col=1)
-            exc_dates = exc_series[exc_series == 1].index
-            if len(exc_dates) > 0:
-                fig_exc.add_trace(go.Scatter(
-                    x=exc_dates, y=[1] * len(exc_dates), mode='markers',
-                    marker=dict(color='red', size=6, symbol='x'),
-                    name="Exception"), row=2, col=1)
-            fig_exc.update_layout(height=450, title="Exception Clustering — Christoffersen independence test")
-            st.plotly_chart(fig_exc, use_container_width=True)
-
-        hs_rate = exc_rates['Historical']
-        kupiec_pass = abs(hs_rate - 1.0) < 0.5
-        st.markdown(f"**Kupiec POF:** {'✅ PASS' if kupiec_pass else '❌ FAIL'} — exception rate {hs_rate:.2f}% vs 1% target")
-        st.markdown("**Christoffersen:** Clustering during stress periods is the key failure mode for Historical VaR — exactly what brought down major shops in 2008.")
-
-        st.markdown("---")
-
-        # ── Stress Test ──
-        st.subheader("🔥 Stress Test Scenarios")
-        stress = run_stress_test(returns_var)
-        var_1d = var_results['Historical']['VaR']
-
-        stress_names  = list(stress.keys())
-        peak_dds      = [stress[s]['Peak Drawdown'] for s in stress_names]
-        dd_var_ratios = [stress[s]['DD / VaR'] for s in stress_names]
-
-        fig_stress = go.Figure()
-        bar_colors = ['#d62728' if 'GFC' in n or 'COVID' in n else '#ff7f0e' for n in stress_names]
-        fig_stress.add_trace(go.Bar(x=stress_names, y=peak_dds, marker_color=bar_colors, name="Peak Drawdown ($)"))
-        fig_stress.add_hline(y=var_1d,       line_dash="dash",  line_color="blue",  annotation_text="99% VaR")
-        fig_stress.add_hline(y=var_1d * 5,   line_dash="dot",   line_color="purple", annotation_text="5× VaR capital")
-        fig_stress.update_layout(title="Stress Loss Waterfall — Peak Drawdown by Scenario",
-                                  yaxis_title="Peak Loss ($)", height=420)
-        st.plotly_chart(fig_stress, use_container_width=True)
-
-        stress_df = pd.DataFrame([{
-            'Scenario':      s,
-            'Peak Drawdown': f"${stress[s]['Peak Drawdown']:,.0f}",
-            'Worst Day':     f"${stress[s]['Worst Day']:,.0f}",
-            'DD / VaR':      f"{stress[s]['DD / VaR']:.1f}×",
-        } for s in stress_names])
-        st.dataframe(stress_df, use_container_width=True, hide_index=True)
-        st.warning("⚠️ Stress losses are typically 3–9× single-day VaR — the mathematical justification for FRTB's stressed-ES capital requirement.")
-
-    # ── TAB 8 — Black-Scholes Options Pricer ───────────────────────────────
-    with tab8:
-        st.header(f"📐 Options Pricer — {detail_stock}")
-        st.caption("Methodology from Project 1 — Closed-form Black-Scholes, 5 Greeks, IV solver, Volatility Smile")
-
-        S = current_price
-        hist_vol = df['Returns'].dropna().std() * np.sqrt(252)
-
-        col1, col2 = st.columns([1, 1])
-
-        with col1:
-            st.subheader("⚙️ Option Parameters")
-            K         = st.number_input("Strike Price ($)", value=round(S, 2), min_value=1.0, step=1.0)
-            T_days    = st.slider("Days to Expiry", 1, 365, 30)
-            r_rate    = st.slider("Risk-Free Rate (%)", 0.0, 10.0, 4.5, 0.1) / 100
-            sigma_pct = st.slider("Implied Volatility (%)", 5.0, 150.0, round(hist_vol * 100, 1), 0.5)
-            sigma     = sigma_pct / 100
-            T         = T_days / 365
-            opt_type  = st.radio("Option Type", ["call", "put"], horizontal=True)
-
-        with col2:
-            st.subheader("💰 Pricing Results")
-            price_bs = bs_price(S, K, T, r_rate, sigma, opt_type)
-            greeks   = bs_greeks(S, K, T, r_rate, sigma, opt_type)
-            intrinsic = max(S - K, 0) if opt_type == 'call' else max(K - S, 0)
-            time_val  = price_bs - intrinsic
-
-            m1, m2 = st.columns(2)
-            m1.metric("Option Price", f"${price_bs:.4f}")
-            m2.metric("Intrinsic Value", f"${intrinsic:.4f}")
-            m1.metric("Time Value", f"${time_val:.4f}")
-            moneyness = "ITM" if (S > K and opt_type == 'call') or (S < K and opt_type == 'put') else "OTM" if (S < K and opt_type == 'call') or (S > K and opt_type == 'put') else "ATM"
-            m2.metric("Moneyness", moneyness)
-
-        st.markdown("---")
-        st.subheader("🔢 The Greeks")
-        g1, g2, g3, g4, g5 = st.columns(5)
-        g1.metric("Delta (δ)", f"{greeks['delta']:.4f}", help="dV/dS — price sensitivity to underlying")
-        g2.metric("Gamma (γ)", f"{greeks['gamma']:.6f}", help="d²V/dS² — rate of delta change")
-        g3.metric("Vega (ν)",  f"{greeks['vega']:.4f}",  help="dV/dσ per 1% vol move")
-        g4.metric("Theta (θ)", f"{greeks['theta']:.4f}", help="dV/dt — daily time decay ($)")
-        g5.metric("Rho (ρ)",   f"{greeks['rho']:.4f}",   help="dV/dr per 1% rate move")
-
-        st.markdown("---")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("📈 Price vs Strike")
-            strikes_plot = np.linspace(S * 0.7, S * 1.3, 60)
-            prices_plot  = [bs_price(S, k, T, r_rate, sigma, opt_type) for k in strikes_plot]
-            intrinsics   = [max(S - k, 0) if opt_type == 'call' else max(k - S, 0) for k in strikes_plot]
-            fig_payoff = go.Figure()
-            fig_payoff.add_trace(go.Scatter(x=strikes_plot, y=intrinsics, name='Intrinsic Value',
-                                             line=dict(color='gray', dash='dash')))
-            fig_payoff.add_trace(go.Scatter(x=strikes_plot, y=prices_plot, name='BS Price',
-                                             line=dict(color='#1f77b4', width=2)))
-            fig_payoff.add_vline(x=S, line_dash="dot", line_color="red", annotation_text="Current Price")
-            fig_payoff.add_vline(x=K, line_dash="dot", line_color="green", annotation_text="Strike")
-            fig_payoff.update_layout(title=f"{opt_type.capitalize()} Price vs Strike",
-                                      xaxis_title="Strike ($)", yaxis_title="Option Price ($)", height=360)
-            st.plotly_chart(fig_payoff, use_container_width=True)
-
-        with col2:
-            st.subheader("😊 Volatility Smile")
-            np.random.seed(42)
-            smile_df = build_vol_smile(df)
-            if not smile_df.empty:
-                fig_smile = go.Figure()
-                fig_smile.add_trace(go.Scatter(
-                    x=smile_df['Moneyness'], y=smile_df['IV'],
-                    mode='lines+markers', name='Implied Vol',
-                    line=dict(color='#9467bd', width=2),
-                    marker=dict(size=5)
-                ))
-                fig_smile.add_hline(y=hist_vol * 100, line_dash="dash", line_color="orange",
-                                    annotation_text=f"Hist. Vol {hist_vol*100:.1f}%")
-                fig_smile.update_layout(
-                    title="Implied Volatility Smile",
-                    xaxis_title="Moneyness (K/S)", yaxis_title="Implied Vol (%)", height=360
+                st.metric(
+                    label=f"{div_emoji} Diversification Score",
+                    value=f"{diversification_score:.1f}/100"
                 )
-                st.plotly_chart(fig_smile, use_container_width=True)
-                st.caption("If BS were perfect, this curve would be flat. The skew is direct evidence of fat tails and crash risk not captured by constant-vol models.")
+                st.write(f"**Average correlation:** {avg_corr:.2f}")
+            
+                if diversification_score > 50:
+                    st.success("✓ Good diversification across holdings")
+                else:
+                    st.warning("⚠️ Consider adding uncorrelated assets")
+        
+            with col2:
+                risk_emoji = "🟢" if 30 < avg_risk < 60 else "🔴" if avg_risk > 60 else "🟡"
+                risk_label = "Balanced" if 30 < avg_risk < 60 else "High Risk" if avg_risk > 60 else "Conservative"
+            
+                st.metric(
+                    label=f"{risk_emoji} Portfolio Risk Profile",
+                    value=f"{avg_risk:.1f}/100"
+                )
+                st.write(f"**Risk Level:** {risk_label}")
+            
+                if avg_risk > 60:
+                    st.info("📊 Suitable for: Growth investors")
+                elif avg_risk > 30:
+                    st.info("📊 Suitable for: Moderate investors")
+                else:
+                    st.info("📊 Suitable for: Conservative investors")
+        
+            # Correlation heatmap
+            st.subheader("📊 Stock Correlation Matrix")
+            corr_matrix = returns_matrix.corr()
+        
+            fig_corr = go.Figure(data=go.Heatmap(
+                z=corr_matrix.values,
+                x=corr_matrix.columns,
+                y=corr_matrix.columns,
+                colorscale='RdYlGn_r',
+                zmid=0,
+                text=np.round(corr_matrix.values, 2),
+                texttemplate='%{text}',
+                textfont={"size": 12},
+                colorbar=dict(title="Correlation")
+            ))
+            fig_corr.update_layout(
+                title="Correlation Between Holdings",
+                height=500
+            )
+            st.plotly_chart(fig_corr, use_container_width=True)
 
-        st.markdown("---")
-        st.subheader("🔁 Put-Call Parity Check")
-        call_price_pcp = bs_price(S, K, T, r_rate, sigma, 'call')
-        put_price_pcp  = bs_price(S, K, T, r_rate, sigma, 'put')
-        lhs = call_price_pcp - put_price_pcp
-        rhs = S - K * np.exp(-r_rate * T)
-        parity_error = abs(lhs - rhs)
-        st.success(f"✅ C − P = ${lhs:.6f} | S − Ke^(−rT) = ${rhs:.6f} | Error = ${parity_error:.2e} (should be ~0)")
+        # ── TAB 7 — VaR & Stress Test ──────────────────────────────────────────
+    with tab7:
+        with timed("VaR & Stress Test rendering"):
+            st.header(f"⚠️ VaR & Stress Test — {detail_stock}")
+            st.caption("Methodology from Project 4 — Historical Simulation, Variance-Covariance, Monte Carlo | Kupiec & Christoffersen backtests | 2008 GFC & 2020 COVID stress replays")
 
-    # ── TAB 9 — Factor Model ───────────────────────────────────────────────
-    with tab9:
-        st.header(f"🔬 Factor Model — {detail_stock}")
-        st.caption("Methodology from Project 3 — Fama-French factor exposures, 12-1 momentum signal, long/short backtest")
+            returns_var = df['Returns'].dropna()
 
-        st.subheader("📊 Fama-French Factor Exposures")
-        exposures = calculate_factor_exposures(df, period="2y")
+            # ── VaR / ES comparison ──
+            st.subheader("📊 VaR & Expected Shortfall (99%, 1-day, $100K portfolio)")
+            var_results = calculate_var_es(returns_var)
 
-        if exposures:
+            col1, col2, col3 = st.columns(3)
+            colors = {'Historical': '#1f77b4', 'Variance-Covariance': '#ff7f0e', 'Monte Carlo': '#2ca02c'}
+            for col, (method, vals) in zip([col1, col2, col3], var_results.items()):
+                with col:
+                    st.markdown(f"**{method}**")
+                    st.metric("VaR ($)", f"${vals['VaR']:,.0f}")
+                    st.metric("ES ($)",  f"${vals['ES']:,.0f}")
+                    st.caption(f"ES/VaR ratio: {vals['ES']/vals['VaR']:.2f}")
+
+            # Bar chart comparison
+            methods = list(var_results.keys())
+            var_vals = [var_results[m]['VaR'] for m in methods]
+            es_vals  = [var_results[m]['ES']  for m in methods]
+
+            fig_var = go.Figure()
+            fig_var.add_trace(go.Bar(name='VaR', x=methods, y=var_vals, marker_color='#1f77b4'))
+            fig_var.add_trace(go.Bar(name='ES',  x=methods, y=es_vals,  marker_color='#ff7f0e'))
+            fig_var.update_layout(
+                title="VaR vs ES by Method — Fat-tail effect: Historical > Gaussian",
+                barmode='group', height=380,
+                yaxis_title="Loss ($)", xaxis_title="Method"
+            )
+            st.plotly_chart(fig_var, use_container_width=True)
+
+            st.info(f"💡 Historical VaR is **${var_results['Historical']['VaR'] - var_results['Variance-Covariance']['VaR']:,.0f} higher** than Gaussian — direct evidence of fat tails in {detail_stock} returns.")
+
+            st.markdown("---")
+
+            # ── Backtest ──
+            st.subheader("🔁 Rolling VaR Backtest (Kupiec test)")
+            with timed("VaR"):
+                exc_series, exc_rates = run_backtest_var(returns_var)
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Historical Exception Rate", f"{exc_rates['Historical']:.2f}%", delta=f"{exc_rates['Historical']-1:.2f}% vs 1% target")
+            col2.metric("Gaussian Exception Rate",   f"{exc_rates['Gaussian']:.2f}%",   delta=f"{exc_rates['Gaussian']-1:.2f}% vs 1% target")
+            col3.metric("Target Rate (99% VaR)", "1.00%")
+
+            # Exception clusters chart
+            if len(exc_series) > 0:
+                cum_pnl = returns_var.loc[exc_series.index] * 100_000
+                fig_exc = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                                        subplot_titles=["Cumulative P&L ($)", "VaR Exceptions"],
+                                        row_heights=[0.65, 0.35], vertical_spacing=0.08)
+                fig_exc.add_trace(go.Scatter(x=cum_pnl.index, y=cum_pnl.cumsum(),
+                                             name="Cumulative P&L", line=dict(color='steelblue')), row=1, col=1)
+                exc_dates = exc_series[exc_series == 1].index
+                if len(exc_dates) > 0:
+                    fig_exc.add_trace(go.Scatter(
+                        x=exc_dates, y=[1] * len(exc_dates), mode='markers',
+                        marker=dict(color='red', size=6, symbol='x'),
+                        name="Exception"), row=2, col=1)
+                fig_exc.update_layout(height=450, title="Exception Clustering — Christoffersen independence test")
+                st.plotly_chart(fig_exc, use_container_width=True)
+
+            hs_rate = exc_rates['Historical']
+            kupiec_pass = abs(hs_rate - 1.0) < 0.5
+            st.markdown(f"**Kupiec POF:** {'✅ PASS' if kupiec_pass else '❌ FAIL'} — exception rate {hs_rate:.2f}% vs 1% target")
+            st.markdown("**Christoffersen:** Clustering during stress periods is the key failure mode for Historical VaR — exactly what brought down major shops in 2008.")
+
+            st.markdown("---")
+
+            # ── Stress Test ──
+            st.subheader("🔥 Stress Test Scenarios")
+            with timed("VaR"):
+                stress = run_stress_test(returns_var)
+            var_1d = var_results['Historical']['VaR']
+
+            stress_names  = list(stress.keys())
+            peak_dds      = [stress[s]['Peak Drawdown'] for s in stress_names]
+            dd_var_ratios = [stress[s]['DD / VaR'] for s in stress_names]
+
+            fig_stress = go.Figure()
+            bar_colors = ['#d62728' if 'GFC' in n or 'COVID' in n else '#ff7f0e' for n in stress_names]
+            fig_stress.add_trace(go.Bar(x=stress_names, y=peak_dds, marker_color=bar_colors, name="Peak Drawdown ($)"))
+            fig_stress.add_hline(y=var_1d,       line_dash="dash",  line_color="blue",  annotation_text="99% VaR")
+            fig_stress.add_hline(y=var_1d * 5,   line_dash="dot",   line_color="purple", annotation_text="5× VaR capital")
+            fig_stress.update_layout(title="Stress Loss Waterfall — Peak Drawdown by Scenario",
+                                      yaxis_title="Peak Loss ($)", height=420)
+            st.plotly_chart(fig_stress, use_container_width=True)
+
+            stress_df = pd.DataFrame([{
+                'Scenario':      s,
+                'Peak Drawdown': f"${stress[s]['Peak Drawdown']:,.0f}",
+                'Worst Day':     f"${stress[s]['Worst Day']:,.0f}",
+                'DD / VaR':      f"{stress[s]['DD / VaR']:.1f}×",
+            } for s in stress_names])
+            st.dataframe(stress_df, use_container_width=True, hide_index=True)
+            st.warning("⚠️ Stress losses are typically 3–9× single-day VaR — the mathematical justification for FRTB's stressed-ES capital requirement.")
+
+        # ── TAB 8 — Black-Scholes Options Pricer ───────────────────────────────
+    with tab8:
+        with timed("Options Pricer rendering"):
+            st.header(f"📐 Options Pricer — {detail_stock}")
+            st.caption("Methodology from Project 1 — Closed-form Black-Scholes, 5 Greeks, IV solver, Volatility Smile")
+
+            S = current_price
+            hist_vol = df['Returns'].dropna().std() * np.sqrt(252)
+
             col1, col2 = st.columns([1, 1])
 
             with col1:
-                e1, e2 = st.columns(2)
-                e1.metric("Alpha (α) annualised", f"{exposures['alpha']:+.2f}%",
-                          help="Excess return unexplained by factors. >0 = outperformance.")
-                e2.metric("Market Beta (β)",      f"{exposures['beta']:.3f}",
-                          help="Sensitivity to market. >1 = amplified market moves.")
-                e1.metric("SMB (size factor)",    f"{exposures['smb']:+.3f}",
-                          help="Negative = large-cap tilt (typical for mega-cap tech).")
-                e2.metric("HML (value factor)",   f"{exposures['hml']:+.3f}",
-                          help="Negative = growth tilt. Positive = value tilt.")
-                e1.metric("MOM (momentum)",       f"{exposures['mom']:+.3f}",
-                          help="Positive = trend-following; negative = mean-reverting.")
-                e2.metric("R² (explained)",        f"{exposures['r2']:.2%}",
-                          help="% of return variation explained by the 4 factors.")
-                st.caption(f"Regression on {exposures.get('n_obs', '—')} daily observations | Factors: SPY (MKT), IWM−SPY (SMB), IVE−IVW (HML), MTUM (MOM)")
+                st.subheader("⚙️ Option Parameters")
+                K         = st.number_input("Strike Price ($)", value=round(S, 2), min_value=1.0, step=1.0)
+                T_days    = st.slider("Days to Expiry", 1, 365, 30)
+                r_rate    = st.slider("Risk-Free Rate (%)", 0.0, 10.0, 4.5, 0.1) / 100
+                sigma_pct = st.slider("Implied Volatility (%)", 5.0, 150.0, round(hist_vol * 100, 1), 0.5)
+                sigma     = sigma_pct / 100
+                T         = T_days / 365
+                opt_type  = st.radio("Option Type", ["call", "put"], horizontal=True)
 
             with col2:
-                # Factor exposure bar chart
-                factor_names = ['Beta (β)', 'SMB', 'HML', 'MOM']
-                factor_vals  = [exposures['beta'], exposures['smb'], exposures['hml'], exposures['mom']]
-                bar_cols = ['#1f77b4' if v >= 0 else '#d62728' for v in factor_vals]
-                fig_exp = go.Figure(go.Bar(
-                    x=factor_names, y=factor_vals,
-                    marker_color=bar_cols, text=[f"{v:+.3f}" for v in factor_vals],
+                st.subheader("💰 Pricing Results")
+                price_bs = bs_price(S, K, T, r_rate, sigma, opt_type)
+                greeks   = bs_greeks(S, K, T, r_rate, sigma, opt_type)
+                intrinsic = max(S - K, 0) if opt_type == 'call' else max(K - S, 0)
+                time_val  = price_bs - intrinsic
+
+                m1, m2 = st.columns(2)
+                m1.metric("Option Price", f"${price_bs:.4f}")
+                m2.metric("Intrinsic Value", f"${intrinsic:.4f}")
+                m1.metric("Time Value", f"${time_val:.4f}")
+                moneyness = "ITM" if (S > K and opt_type == 'call') or (S < K and opt_type == 'put') else "OTM" if (S < K and opt_type == 'call') or (S > K and opt_type == 'put') else "ATM"
+                m2.metric("Moneyness", moneyness)
+
+            st.markdown("---")
+            st.subheader("🔢 The Greeks")
+            g1, g2, g3, g4, g5 = st.columns(5)
+            g1.metric("Delta (δ)", f"{greeks['delta']:.4f}", help="dV/dS — price sensitivity to underlying")
+            g2.metric("Gamma (γ)", f"{greeks['gamma']:.6f}", help="d²V/dS² — rate of delta change")
+            g3.metric("Vega (ν)",  f"{greeks['vega']:.4f}",  help="dV/dσ per 1% vol move")
+            g4.metric("Theta (θ)", f"{greeks['theta']:.4f}", help="dV/dt — daily time decay ($)")
+            g5.metric("Rho (ρ)",   f"{greeks['rho']:.4f}",   help="dV/dr per 1% rate move")
+
+            st.markdown("---")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader("📈 Price vs Strike")
+                strikes_plot = np.linspace(S * 0.7, S * 1.3, 60)
+                prices_plot  = [bs_price(S, k, T, r_rate, sigma, opt_type) for k in strikes_plot]
+                intrinsics   = [max(S - k, 0) if opt_type == 'call' else max(k - S, 0) for k in strikes_plot]
+                fig_payoff = go.Figure()
+                fig_payoff.add_trace(go.Scatter(x=strikes_plot, y=intrinsics, name='Intrinsic Value',
+                                                 line=dict(color='gray', dash='dash')))
+                fig_payoff.add_trace(go.Scatter(x=strikes_plot, y=prices_plot, name='BS Price',
+                                                 line=dict(color='#1f77b4', width=2)))
+                fig_payoff.add_vline(x=S, line_dash="dot", line_color="red", annotation_text="Current Price")
+                fig_payoff.add_vline(x=K, line_dash="dot", line_color="green", annotation_text="Strike")
+                fig_payoff.update_layout(title=f"{opt_type.capitalize()} Price vs Strike",
+                                          xaxis_title="Strike ($)", yaxis_title="Option Price ($)", height=360)
+                st.plotly_chart(fig_payoff, use_container_width=True)
+
+            with col2:
+                st.subheader("😊 Volatility Smile")
+                np.random.seed(42)
+                smile_df = build_vol_smile(df)
+                if not smile_df.empty:
+                    fig_smile = go.Figure()
+                    fig_smile.add_trace(go.Scatter(
+                        x=smile_df['Moneyness'], y=smile_df['IV'],
+                        mode='lines+markers', name='Implied Vol',
+                        line=dict(color='#9467bd', width=2),
+                        marker=dict(size=5)
+                    ))
+                    fig_smile.add_hline(y=hist_vol * 100, line_dash="dash", line_color="orange",
+                                        annotation_text=f"Hist. Vol {hist_vol*100:.1f}%")
+                    fig_smile.update_layout(
+                        title="Implied Volatility Smile",
+                        xaxis_title="Moneyness (K/S)", yaxis_title="Implied Vol (%)", height=360
+                    )
+                    st.plotly_chart(fig_smile, use_container_width=True)
+                    st.caption("If BS were perfect, this curve would be flat. The skew is direct evidence of fat tails and crash risk not captured by constant-vol models.")
+
+            st.markdown("---")
+            st.subheader("🔁 Put-Call Parity Check")
+            call_price_pcp = bs_price(S, K, T, r_rate, sigma, 'call')
+            put_price_pcp  = bs_price(S, K, T, r_rate, sigma, 'put')
+            lhs = call_price_pcp - put_price_pcp
+            rhs = S - K * np.exp(-r_rate * T)
+            parity_error = abs(lhs - rhs)
+            st.success(f"✅ C − P = ${lhs:.6f} | S − Ke^(−rT) = ${rhs:.6f} | Error = ${parity_error:.2e} (should be ~0)")
+
+        # ── TAB 9 — Factor Model ───────────────────────────────────────────────
+    with tab9:
+        with timed("Factor Model rendering"):
+            st.header(f"🔬 Factor Model — {detail_stock}")
+            st.caption("Methodology from Project 3 — Fama-French factor exposures, 12-1 momentum signal, long/short backtest")
+
+            st.subheader("📊 Fama-French Factor Exposures")
+            with timed("Factor model"):
+                exposures = calculate_factor_exposures(df, period="2y")
+
+            if exposures:
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+                    e1, e2 = st.columns(2)
+                    e1.metric("Alpha (α) annualised", f"{exposures['alpha']:+.2f}%",
+                              help="Excess return unexplained by factors. >0 = outperformance.")
+                    e2.metric("Market Beta (β)",      f"{exposures['beta']:.3f}",
+                              help="Sensitivity to market. >1 = amplified market moves.")
+                    e1.metric("SMB (size factor)",    f"{exposures['smb']:+.3f}",
+                              help="Negative = large-cap tilt (typical for mega-cap tech).")
+                    e2.metric("HML (value factor)",   f"{exposures['hml']:+.3f}",
+                              help="Negative = growth tilt. Positive = value tilt.")
+                    e1.metric("MOM (momentum)",       f"{exposures['mom']:+.3f}",
+                              help="Positive = trend-following; negative = mean-reverting.")
+                    e2.metric("R² (explained)",        f"{exposures['r2']:.2%}",
+                              help="% of return variation explained by the 4 factors.")
+                    st.caption(f"Regression on {exposures.get('n_obs', '—')} daily observations | Factors: SPY (MKT), IWM−SPY (SMB), IVE−IVW (HML), MTUM (MOM)")
+
+                with col2:
+                    # Factor exposure bar chart
+                    factor_names = ['Beta (β)', 'SMB', 'HML', 'MOM']
+                    factor_vals  = [exposures['beta'], exposures['smb'], exposures['hml'], exposures['mom']]
+                    bar_cols = ['#1f77b4' if v >= 0 else '#d62728' for v in factor_vals]
+                    fig_exp = go.Figure(go.Bar(
+                        x=factor_names, y=factor_vals,
+                        marker_color=bar_cols, text=[f"{v:+.3f}" for v in factor_vals],
+                        textposition='outside'
+                    ))
+                    fig_exp.add_hline(y=0, line_color='gray', line_width=0.8)
+                    fig_exp.update_layout(
+                        title=f"{detail_stock} Factor Exposures",
+                        yaxis_title="Loading", height=360,
+                        yaxis=dict(zeroline=True)
+                    )
+                    st.plotly_chart(fig_exp, use_container_width=True)
+
+                # Interpretation
+                beta = exposures['beta']
+                alpha = exposures['alpha']
+                if beta > 1.2:
+                    st.warning(f"⚡ High beta ({beta:.2f}) — {detail_stock} amplifies market moves by {beta:.1f}×")
+                elif beta < 0.8:
+                    st.success(f"🛡️ Defensive beta ({beta:.2f}) — {detail_stock} is less sensitive to market swings")
+                else:
+                    st.info(f"📊 Market beta ({beta:.2f}) — {detail_stock} moves roughly in line with the market")
+
+                if alpha > 5:
+                    st.success(f"✅ Positive alpha ({alpha:+.1f}% annualised) — outperforming risk-adjusted benchmark")
+                elif alpha < -5:
+                    st.warning(f"⚠️ Negative alpha ({alpha:+.1f}% annualised) — underperforming risk-adjusted benchmark")
+
+            else:
+                st.warning("Insufficient data for factor regression (need 60+ days).")
+
+            st.markdown("---")
+
+            # ── Momentum Signal ──
+            st.subheader("🚀 Momentum Signal (12-1 month)")
+            mom_signals = {}
+            with timed("Factor model"):
+                for stock in selected_stocks:
+                    sdf = stock_data[stock]
+                    if len(sdf) >= 22:
+                        mom_signals[stock] = calculate_momentum_signal(sdf)
+
+            if mom_signals:
+                sorted_mom = sorted(mom_signals.items(), key=lambda x: x[1], reverse=True)
+                mom_stocks = [x[0] for x in sorted_mom]
+                mom_vals   = [x[1] for x in sorted_mom]
+                mom_colors = ['#2ca02c' if v > 0 else '#d62728' for v in mom_vals]
+
+                fig_mom = go.Figure(go.Bar(
+                    x=mom_stocks, y=mom_vals,
+                    marker_color=mom_colors,
+                    text=[f"{v:+.1f}%" for v in mom_vals],
                     textposition='outside'
                 ))
-                fig_exp.add_hline(y=0, line_color='gray', line_width=0.8)
-                fig_exp.update_layout(
-                    title=f"{detail_stock} Factor Exposures",
-                    yaxis_title="Loading", height=360,
-                    yaxis=dict(zeroline=True)
+                fig_mom.add_hline(y=0, line_color='gray')
+                fig_mom.update_layout(
+                    title="12-1 Month Momentum Signal — Long top tercile, Short bottom tercile",
+                    yaxis_title="Momentum (%)", height=360
                 )
-                st.plotly_chart(fig_exp, use_container_width=True)
+                st.plotly_chart(fig_mom, use_container_width=True)
 
-            # Interpretation
-            beta = exposures['beta']
-            alpha = exposures['alpha']
-            if beta > 1.2:
-                st.warning(f"⚡ High beta ({beta:.2f}) — {detail_stock} amplifies market moves by {beta:.1f}×")
-            elif beta < 0.8:
-                st.success(f"🛡️ Defensive beta ({beta:.2f}) — {detail_stock} is less sensitive to market swings")
+                # Rank table
+                rank_df = pd.DataFrame(sorted_mom, columns=['Stock', 'Momentum (%)'])
+                rank_df['Rank']   = range(1, len(rank_df) + 1)
+                rank_df['Signal'] = rank_df['Momentum (%)'].apply(
+                    lambda x: '🟢 LONG'  if x == max(mom_vals) else
+                              '🔴 SHORT' if x == min(mom_vals) else '⚪ Neutral')
+                rank_df['Momentum (%)'] = rank_df['Momentum (%)'].apply(lambda x: f"{x:+.2f}%")
+                st.dataframe(rank_df[['Rank', 'Stock', 'Momentum (%)', 'Signal']],
+                             use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+
+            # ── Momentum Backtest ──
+            st.subheader(f"📈 Momentum Strategy Backtest — {detail_stock}")
+            with timed("Factor model"):
+                bt = momentum_backtest(df)
+
+            if bt:
+                b1, b2, b3, b4 = st.columns(4)
+                b1.metric("Annualised Return", f"{bt['ann_return']:+.2f}%")
+                b2.metric("Sharpe Ratio",      f"{bt['sharpe']:.2f}")
+                b3.metric("Max Drawdown",      f"{bt['max_drawdown']:.2f}%")
+                b4.metric("Hit Rate",          f"{bt['hit_rate']:.1f}%")
+
+                fig_bt = go.Figure()
+                fig_bt.add_trace(go.Scatter(
+                    x=bt['cum_returns'].index, y=bt['cum_returns'],
+                    name='Momentum Strategy', line=dict(color='#d62728', width=2),
+                    fill='tonexty', fillcolor='rgba(214,39,40,0.08)'
+                ))
+                fig_bt.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="Breakeven")
+                fig_bt.update_layout(
+                    title=f"Long/Short Momentum Cumulative Returns — {detail_stock}",
+                    xaxis_title="Date", yaxis_title="Cumulative Return",
+                    height=400
+                )
+                st.plotly_chart(fig_bt, use_container_width=True)
+                st.caption("Strategy goes long when 12-1 month momentum is positive, short when negative. Sub-50% hit rate with positive returns reflects momentum's characteristic negative-skew payoff profile.")
             else:
-                st.info(f"📊 Market beta ({beta:.2f}) — {detail_stock} moves roughly in line with the market")
+                st.info("Need 252+ days of data to run the momentum backtest.")
 
-            if alpha > 5:
-                st.success(f"✅ Positive alpha ({alpha:+.1f}% annualised) — outperforming risk-adjusted benchmark")
-            elif alpha < -5:
-                st.warning(f"⚠️ Negative alpha ({alpha:+.1f}% annualised) — underperforming risk-adjusted benchmark")
-
-        else:
-            st.warning("Insufficient data for factor regression (need 60+ days).")
-
-        st.markdown("---")
-
-        # ── Momentum Signal ──
-        st.subheader("🚀 Momentum Signal (12-1 month)")
-        mom_signals = {}
-        for stock in selected_stocks:
-            sdf = stock_data[stock]
-            if len(sdf) >= 22:
-                mom_signals[stock] = calculate_momentum_signal(sdf)
-
-        if mom_signals:
-            sorted_mom = sorted(mom_signals.items(), key=lambda x: x[1], reverse=True)
-            mom_stocks = [x[0] for x in sorted_mom]
-            mom_vals   = [x[1] for x in sorted_mom]
-            mom_colors = ['#2ca02c' if v > 0 else '#d62728' for v in mom_vals]
-
-            fig_mom = go.Figure(go.Bar(
-                x=mom_stocks, y=mom_vals,
-                marker_color=mom_colors,
-                text=[f"{v:+.1f}%" for v in mom_vals],
-                textposition='outside'
-            ))
-            fig_mom.add_hline(y=0, line_color='gray')
-            fig_mom.update_layout(
-                title="12-1 Month Momentum Signal — Long top tercile, Short bottom tercile",
-                yaxis_title="Momentum (%)", height=360
-            )
-            st.plotly_chart(fig_mom, use_container_width=True)
-
-            # Rank table
-            rank_df = pd.DataFrame(sorted_mom, columns=['Stock', 'Momentum (%)'])
-            rank_df['Rank']   = range(1, len(rank_df) + 1)
-            rank_df['Signal'] = rank_df['Momentum (%)'].apply(
-                lambda x: '🟢 LONG'  if x == max(mom_vals) else
-                          '🔴 SHORT' if x == min(mom_vals) else '⚪ Neutral')
-            rank_df['Momentum (%)'] = rank_df['Momentum (%)'].apply(lambda x: f"{x:+.2f}%")
-            st.dataframe(rank_df[['Rank', 'Stock', 'Momentum (%)', 'Signal']],
-                         use_container_width=True, hide_index=True)
-
-        st.markdown("---")
-
-        # ── Momentum Backtest ──
-        st.subheader(f"📈 Momentum Strategy Backtest — {detail_stock}")
-        bt = momentum_backtest(df)
-
-        if bt:
-            b1, b2, b3, b4 = st.columns(4)
-            b1.metric("Annualised Return", f"{bt['ann_return']:+.2f}%")
-            b2.metric("Sharpe Ratio",      f"{bt['sharpe']:.2f}")
-            b3.metric("Max Drawdown",      f"{bt['max_drawdown']:.2f}%")
-            b4.metric("Hit Rate",          f"{bt['hit_rate']:.1f}%")
-
-            fig_bt = go.Figure()
-            fig_bt.add_trace(go.Scatter(
-                x=bt['cum_returns'].index, y=bt['cum_returns'],
-                name='Momentum Strategy', line=dict(color='#d62728', width=2),
-                fill='tonexty', fillcolor='rgba(214,39,40,0.08)'
-            ))
-            fig_bt.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="Breakeven")
-            fig_bt.update_layout(
-                title=f"Long/Short Momentum Cumulative Returns — {detail_stock}",
-                xaxis_title="Date", yaxis_title="Cumulative Return",
-                height=400
-            )
-            st.plotly_chart(fig_bt, use_container_width=True)
-            st.caption("Strategy goes long when 12-1 month momentum is positive, short when negative. Sub-50% hit rate with positive returns reflects momentum's characteristic negative-skew payoff profile.")
-        else:
-            st.info("Need 252+ days of data to run the momentum backtest.")
+    # Snapshot this rerun's timings/cache status for the sidebar debug panel.
+    # The panel is drawn earlier in this same function, so it always shows
+    # the PREVIOUS completed rerun's numbers, not this one.
+    if DEBUG_PERFORMANCE:
+        st.session_state['last_timings'] = dict(_TIMINGS)
+        st.session_state['last_cache_status'] = {k: dict(v) for k, v in _CACHE_STATUS.items()}
 
 
 if __name__ == "__main__":
-    main()
+    with timed("Total rerun time"):
+        main()
+    _log_timing_report()
