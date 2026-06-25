@@ -106,72 +106,158 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS with personal branding
+# Custom CSS with personal branding - "Glass Terminal": institutional dark
+# shell + restrained glass/gradient depth. See DESIGN.md for the token system.
 st.markdown("""
 <style>
+    /* ============================================================
+       Design tokens - the only place radius / blur / shadow / motion
+       timing values are defined. Extend these; don't invent new ones.
+       ============================================================ */
+    :root {
+        --radius-sm: 5px;
+        --radius-md: 10px;
+        --radius-lg: 15px;
+        --radius-xl: 20px;
+        --ease-out-quint: cubic-bezier(.23, 1, .32, 1);
+        --signal-red: #FF4B4B;
+        --ink-white: #FAFAFA;
+        --glass-surface: rgba(38, 39, 48, 0.55);
+        --glass-surface-strong: rgba(38, 39, 48, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.09);
+        --glass-highlight: rgba(255, 255, 255, 0.07);
+        --blur-sm: 10px;
+        --blur-lg: 22px;
+        --shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.4);
+        --shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.5);
+        --shadow-glass: 0 10px 30px rgba(0, 0, 0, 0.38);
+    }
+
+    /* Premium spacing: a little more air around the main canvas */
+    .block-container {
+        padding-top: 1.75rem;
+        padding-bottom: 3rem;
+    }
+
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
+        font-size: 2.6rem;
+        font-weight: 800;
+        letter-spacing: -0.01em;
         text-align: center;
-        color: #FAFAFA;
-        margin-bottom: 1rem;
+        color: var(--ink-white);
+        margin-bottom: 0.35rem;
     }
     .sub-header {
         text-align: center;
-        color: #666;
+        color: rgba(250, 250, 250, 0.6);
         font-size: 1rem;
-        margin-bottom: 2rem;
+        margin-bottom: 0;
     }
+
+    /* ---- Hero: glass panel housing the masthead. Text stays solid Ink
+       White - the gradient lives in the surface/backdrop, never in the
+       text, which is what keeps this from reading as gradient-clip-text
+       AI-SaaS slop. ---- */
+    .hero-panel {
+        position: relative;
+        isolation: isolate;
+        padding: 2rem 2rem 1.5rem;
+        margin-bottom: 1.75rem;
+        border-radius: var(--radius-xl);
+        background: var(--glass-surface);
+        backdrop-filter: blur(var(--blur-lg)) saturate(150%);
+        -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(150%);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 var(--glass-highlight);
+        animation: fadeInUp 480ms var(--ease-out-quint) both;
+    }
+    .hero-panel::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        border-radius: inherit;
+        background:
+            radial-gradient(ellipse 480px 220px at 12% 0%, rgba(255, 75, 75, 0.16), transparent 65%),
+            radial-gradient(ellipse 420px 220px at 92% 100%, rgba(56, 189, 181, 0.12), transparent 65%);
+        pointer-events: none;
+    }
+    .hero-panel::after {
+        content: "";
+        position: absolute;
+        left: 10%;
+        right: 10%;
+        bottom: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255, 75, 75, 0.45), transparent);
+        pointer-events: none;
+    }
+    @media (prefers-reduced-transparency: reduce) {
+        .hero-panel { background: var(--glass-surface-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
+    }
+
     .recommendation-buy {
-        background: #008000;
-        padding: 1rem;
-        border-radius: 10px;
-        color: #FAFAFA;
+        background: linear-gradient(155deg, #0F8A3C 0%, #0A6B2E 100%);
+        padding: 1.25rem 1.5rem;
+        border-radius: var(--radius-md);
+        color: var(--ink-white);
         text-align: left;
         margin: 0.5rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.10);
     }
     .recommendation-sell {
-        background: #B00020;
-        padding: 1rem;
-        border-radius: 10px;
-        color: #FAFAFA;
+        background: linear-gradient(155deg, #C2273D 0%, #8E1B2D 100%);
+        padding: 1.25rem 1.5rem;
+        border-radius: var(--radius-md);
+        color: var(--ink-white);
         text-align: left;
         margin: 0.5rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.10);
     }
     .recommendation-hold {
-        background: #4B5563;
-        padding: 1rem;
-        border-radius: 10px;
-        color: #FAFAFA;
+        background: linear-gradient(155deg, #5B6472 0%, #3D434D 100%);
+        padding: 1.25rem 1.5rem;
+        border-radius: var(--radius-md);
+        color: var(--ink-white);
         text-align: left;
         margin: 0.5rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.10);
     }
     .risk-score-low {
         background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
         padding: 1.5rem;
-        border-radius: 15px;
+        border-radius: var(--radius-lg);
         color: white;
         text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.16);
     }
     .risk-score-medium {
         background: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);
         padding: 1.5rem;
-        border-radius: 15px;
+        border-radius: var(--radius-lg);
         color: white;
         text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.16);
     }
     .risk-score-high {
         background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
         padding: 1.5rem;
-        border-radius: 15px;
+        border-radius: var(--radius-lg);
         color: white;
         text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.16);
     }
 
     /* ---- Motion layer: tasteful, institutional. Transform/opacity only,
-       fully neutered under prefers-reduced-motion. No new colors. ---- */
+       fully neutered under prefers-reduced-motion. ---- */
     @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(8px); }
+        from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
     }
     @keyframes livePulse {
@@ -186,17 +272,21 @@ st.markdown("""
         from { transform: translateX(0); }
         to { transform: translateX(-50%); }
     }
+    @keyframes ambienceDrift {
+        from { background-position: 0 0, 0 0, 0 0, 0 0; }
+        to { background-position: 0 0, 0 0, 0 0, 480px 480px; }
+    }
 
     .risk-score-low, .risk-score-medium, .risk-score-high,
     .recommendation-buy, .recommendation-sell, .recommendation-hold {
-        transition: transform 180ms cubic-bezier(.23, 1, .32, 1),
-                    box-shadow 180ms cubic-bezier(.23, 1, .32, 1);
-        animation: fadeInUp 420ms cubic-bezier(.23, 1, .32, 1) both;
+        transition: transform 200ms var(--ease-out-quint),
+                    box-shadow 200ms var(--ease-out-quint);
+        animation: fadeInUp 420ms var(--ease-out-quint) both;
     }
     .risk-score-low:hover, .risk-score-medium:hover, .risk-score-high:hover,
     .recommendation-buy:hover, .recommendation-sell:hover, .recommendation-hold:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        transform: translateY(-3px);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
     }
 
     /* Live status badge - dot encodes real state (live feed vs simulated), not decoration */
@@ -221,14 +311,22 @@ st.markdown("""
         animation: none;
     }
 
-    /* Scrolling ticker tape */
+    /* Scrolling ticker tape - thin glass strip */
     .ticker-wrap {
+        position: relative;
         overflow: hidden;
-        background: #262730;
-        border-radius: 5px;
-        padding: 0.5rem 0;
+        background: var(--glass-surface);
+        backdrop-filter: blur(var(--blur-sm)) saturate(140%);
+        -webkit-backdrop-filter: blur(var(--blur-sm)) saturate(140%);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-sm);
+        padding: 0.55rem 0;
         margin-bottom: 0.75rem;
         white-space: nowrap;
+        box-shadow: inset 0 1px 0 var(--glass-highlight);
+    }
+    @media (prefers-reduced-transparency: reduce) {
+        .ticker-wrap { background: var(--glass-surface-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
     }
     .ticker-track {
         display: inline-flex;
@@ -250,8 +348,11 @@ st.markdown("""
 
     /* Skeleton loading placeholder, matches the KPI card shape it precedes */
     .skeleton-card {
-        background: #262730;
-        border-radius: 10px;
+        background: var(--glass-surface);
+        backdrop-filter: blur(var(--blur-sm));
+        -webkit-backdrop-filter: blur(var(--blur-sm));
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
         padding: 1rem;
         margin: 0.5rem 0;
         height: 96px;
@@ -265,37 +366,43 @@ st.markdown("""
         animation: shimmer 1.6s linear infinite;
     }
 
-    /* ---- Ambient backdrop: faint grid/sparkline/candlestick texture painted onto
-       .stApp's own canvas-black background (the only opaque layer at this level -
-       sidebar, cards and banners all have their own backgrounds, so this never
-       competes with text). Pure CSS, no extra assets. ---- */
+    /* ---- Ambient backdrop: tonal gradient mesh (deep blue/teal, trading-floor-
+       at-night, not saturated AI-purple) layered under the existing faint grid/
+       sparkline/candlestick texture, painted onto .stApp's own canvas-black
+       background. Pure CSS, no extra assets, never competes with text. ---- */
     .stApp {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480' viewBox='0 0 480 480'%3E%3Cg stroke='rgba(250,250,250,0.05)' stroke-width='1'%3E%3Cline x1='0' y1='120' x2='480' y2='120'/%3E%3Cline x1='0' y1='360' x2='480' y2='360'/%3E%3Cline x1='160' y1='0' x2='160' y2='480'/%3E%3Cline x1='320' y1='0' x2='320' y2='480'/%3E%3C/g%3E%3Cpolyline points='20,300 70,260 120,300 170,220 220,260 270,180 320,230 370,150 420,200 460,140' fill='none' stroke='rgba(250,250,250,0.07)' stroke-width='1.5'/%3E%3Cg fill='rgba(250,250,250,0.08)'%3E%3Ccircle cx='70' cy='260' r='2.5'/%3E%3Ccircle cx='220' cy='260' r='2.5'/%3E%3Ccircle cx='370' cy='150' r='2.5'/%3E%3C/g%3E%3Cg stroke='rgba(250,250,250,0.045)' stroke-width='2'%3E%3Cline x1='40' y1='400' x2='40' y2='430'/%3E%3Cline x1='65' y1='390' x2='65' y2='440'/%3E%3Cline x1='90' y1='405' x2='90' y2='425'/%3E%3Cline x1='115' y1='395' x2='115' y2='435'/%3E%3Cline x1='140' y1='410' x2='140' y2='420'/%3E%3C/g%3E%3C/svg%3E");
-        background-repeat: repeat;
-        background-size: 480px 480px;
-        background-attachment: fixed;
+        background-image:
+            radial-gradient(ellipse 1100px 650px at 8% -8%, rgba(46, 84, 138, 0.16), transparent 60%),
+            radial-gradient(ellipse 900px 700px at 105% 8%, rgba(20, 110, 100, 0.13), transparent 55%),
+            radial-gradient(ellipse 800px 500px at 50% 115%, rgba(255, 75, 75, 0.05), transparent 60%),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480' viewBox='0 0 480 480'%3E%3Cg stroke='rgba(250,250,250,0.05)' stroke-width='1'%3E%3Cline x1='0' y1='120' x2='480' y2='120'/%3E%3Cline x1='0' y1='360' x2='480' y2='360'/%3E%3Cline x1='160' y1='0' x2='160' y2='480'/%3E%3Cline x1='320' y1='0' x2='320' y2='480'/%3E%3C/g%3E%3Cpolyline points='20,300 70,260 120,300 170,220 220,260 270,180 320,230 370,150 420,200 460,140' fill='none' stroke='rgba(250,250,250,0.07)' stroke-width='1.5'/%3E%3Cg fill='rgba(250,250,250,0.08)'%3E%3Ccircle cx='70' cy='260' r='2.5'/%3E%3Ccircle cx='220' cy='260' r='2.5'/%3E%3Ccircle cx='370' cy='150' r='2.5'/%3E%3C/g%3E%3Cg stroke='rgba(250,250,250,0.045)' stroke-width='2'%3E%3Cline x1='40' y1='400' x2='40' y2='430'/%3E%3Cline x1='65' y1='390' x2='65' y2='440'/%3E%3Cline x1='90' y1='405' x2='90' y2='425'/%3E%3Cline x1='115' y1='395' x2='115' y2='435'/%3E%3Cline x1='140' y1='410' x2='140' y2='420'/%3E%3C/g%3E%3C/svg%3E");
+        background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+        background-size: 100% 100%, 100% 100%, 100% 100%, 480px 480px;
+        background-position: 0 0, 0 0, 0 0, 0 0;
+        background-attachment: fixed, fixed, fixed, fixed;
         animation: ambienceDrift 140s linear infinite;
-    }
-    @keyframes ambienceDrift {
-        from { background-position: 0 0; }
-        to { background-position: 480px 480px; }
     }
 
     /* ---- Buttons: hover lift + soft Signal-Red glow + one-shot shimmer + press.
-       Scoped to real content buttons only - excludes header/per-element toolbar icons. ---- */
+       Primary buttons get a faint gradient fill for emphasis - the one accent
+       hue in the system, never a second uncoordinated color. ---- */
     button[data-testid="stBaseButton-secondary"],
     button[data-testid="stBaseButton-primary"] {
         position: relative;
         overflow: hidden;
-        transition: transform 150ms cubic-bezier(.23, 1, .32, 1),
-                    box-shadow 150ms cubic-bezier(.23, 1, .32, 1),
-                    border-color 150ms cubic-bezier(.23, 1, .32, 1);
+        border-radius: var(--radius-sm);
+        transition: transform 160ms var(--ease-out-quint),
+                    box-shadow 160ms var(--ease-out-quint),
+                    border-color 160ms var(--ease-out-quint);
+    }
+    button[data-testid="stBaseButton-primary"] {
+        background: linear-gradient(135deg, rgba(255, 75, 75, 0.18), rgba(255, 75, 75, 0.04));
     }
     button[data-testid="stBaseButton-secondary"]:hover,
     button[data-testid="stBaseButton-primary"]:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 14px rgba(255, 75, 75, 0.16);
-        border-color: rgba(255, 75, 75, 0.55);
+        box-shadow: 0 6px 18px rgba(255, 75, 75, 0.22);
+        border-color: rgba(255, 75, 75, 0.6);
     }
     button[data-testid="stBaseButton-secondary"]:active,
     button[data-testid="stBaseButton-primary"]:active {
@@ -320,41 +427,71 @@ st.markdown("""
         left: 150%;
     }
 
-    /* ---- Tabs: smooth color transition on selection instead of an instant snap ---- */
+    /* ---- Tabs: active tab gets a faint glass pill + glow underline instead
+       of an instant color snap, so the hierarchy of "where am I" is clearer. ---- */
     button[data-testid="stTab"] {
-        transition: color 200ms cubic-bezier(.23, 1, .32, 1);
+        border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+        transition: color 200ms var(--ease-out-quint),
+                    background-color 200ms var(--ease-out-quint);
+    }
+    button[data-testid="stTab"][aria-selected="true"] {
+        background: linear-gradient(180deg, rgba(255, 75, 75, 0.12), transparent);
+        box-shadow: inset 0 -2px 0 var(--signal-red);
     }
 
     /* ---- Section entrance: tab panels toggle display:none -> block on switch,
        which restarts a CSS animation for free (no JS needed). ---- */
     div[data-baseweb="tab-panel"] {
-        animation: fadeInUp 420ms cubic-bezier(.23, 1, .32, 1) both;
+        animation: fadeInUp 420ms var(--ease-out-quint) both;
     }
 
-    /* ---- Chart / metric hover micro-motion ---- */
-    [data-testid="stPlotlyChart"] {
-        border-radius: 10px;
-        transition: transform 200ms cubic-bezier(.23, 1, .32, 1),
-                    box-shadow 200ms cubic-bezier(.23, 1, .32, 1);
+    /* ---- Chart / dataframe sections: tinted glass frame gives each section
+       real edges instead of floating loose on the canvas. No backdrop-filter
+       here on purpose - dozens of these exist per tab, blur at that count is
+       a real GPU cost; a flat tint is the cheap, still-premium option. ---- */
+    [data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {
+        position: relative;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--glass-border);
+        background: rgba(38, 39, 48, 0.28);
+        padding: 0.4rem;
+        transition: transform 200ms var(--ease-out-quint),
+                    box-shadow 200ms var(--ease-out-quint),
+                    border-color 200ms var(--ease-out-quint);
     }
-    [data-testid="stPlotlyChart"]:hover {
+    [data-testid="stPlotlyChart"]::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 10%; right: 10%;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(255, 75, 75, 0.45), rgba(56, 189, 181, 0.3));
+        opacity: 0.85;
+        pointer-events: none;
+    }
+    [data-testid="stPlotlyChart"]:hover, [data-testid="stDataFrame"]:hover {
         transform: translateY(-2px);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        box-shadow: var(--shadow-hover);
+        border-color: rgba(255, 255, 255, 0.16);
     }
     [data-testid="stMetric"] {
         border-radius: 8px;
         padding: 0.4rem 0.5rem;
         margin: -0.4rem -0.5rem;
-        transition: background-color 150ms cubic-bezier(.23, 1, .32, 1),
-                    transform 150ms cubic-bezier(.23, 1, .32, 1);
+        transition: background-color 150ms var(--ease-out-quint),
+                    transform 150ms var(--ease-out-quint);
     }
     [data-testid="stMetric"]:hover {
-        background-color: rgba(255, 255, 255, 0.03);
+        background-color: rgba(255, 255, 255, 0.04);
         transform: translateY(-1px);
     }
 
+    /* Sidebar: faint edge separating it from the ambient canvas */
+    section[data-testid="stSidebar"] {
+        border-right: 1px solid var(--glass-border);
+    }
+
     @media (prefers-reduced-motion: reduce) {
-        .risk-score-low, .risk-score-medium, .risk-score-high,
+        .hero-panel, .risk-score-low, .risk-score-medium, .risk-score-high,
         .recommendation-buy, .recommendation-sell, .recommendation-hold,
         .live-dot, .ticker-track, .skeleton-line, .stApp,
         button[data-testid="stBaseButton-secondary"],
@@ -362,6 +499,7 @@ st.markdown("""
         button[data-testid="stTab"],
         div[data-baseweb="tab-panel"],
         [data-testid="stPlotlyChart"],
+        [data-testid="stDataFrame"],
         [data-testid="stMetric"] {
             animation: none !important;
             transition: none !important;
@@ -1338,17 +1476,30 @@ def render_kpi_price_cards(selected_stocks, stock_data):
       .kpi-grid {{ display:grid; grid-template-columns: repeat({cols_per_row}, 1fr); gap: 0.75rem; padding: 4px; }}
       @media (max-width: 700px) {{ .kpi-grid {{ grid-template-columns: repeat(2, 1fr); }} }}
       .kpi-card {{
-        background:#262730; border-radius:10px; padding:1rem; text-align:center; box-sizing:border-box;
+        position: relative; overflow: hidden; isolation: isolate;
+        background: rgba(38, 39, 48, 0.55);
+        backdrop-filter: blur(10px) saturate(140%); -webkit-backdrop-filter: blur(10px) saturate(140%);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 10px; padding:1rem; text-align:center; box-sizing:border-box;
         color:#FAFAFA; opacity:0; animation: fadeInUp 420ms cubic-bezier(.23,1,.32,1) forwards;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.07);
         transition: transform 180ms cubic-bezier(.23,1,.32,1), box-shadow 180ms cubic-bezier(.23,1,.32,1);
       }}
-      .kpi-card:hover {{ transform: translateY(-2px); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }}
-      .kpi-symbol {{ font-size:0.95rem; font-weight:700; color:#FAFAFA; margin-bottom:0.25rem; }}
+      .kpi-card::before {{
+        content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+        background: radial-gradient(ellipse 140px 80px at 0% 0%, rgba(255,75,75,0.14), transparent 70%);
+        pointer-events: none;
+      }}
+      @media (prefers-reduced-transparency: reduce) {{
+        .kpi-card {{ background: rgba(38, 39, 48, 0.92); backdrop-filter: none; -webkit-backdrop-filter: none; }}
+      }}
+      .kpi-card:hover {{ transform: translateY(-3px); box-shadow: 0 14px 34px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12); }}
+      .kpi-symbol {{ font-size:0.95rem; font-weight:700; color:#FAFAFA; margin-bottom:0.25rem; letter-spacing: 0.01em; }}
       .kpi-price {{ font-size:1.6rem; font-weight:700; color:#FAFAFA; margin:0.1rem 0; }}
       .kpi-change {{ font-size:0.95rem; }}
       .kpi-up {{ color: green; }}
       .kpi-down {{ color: red; }}
-      @keyframes fadeInUp {{ from {{ opacity:0; transform: translateY(8px); }} to {{ opacity:1; transform: translateY(0); }} }}
+      @keyframes fadeInUp {{ from {{ opacity:0; transform: translateY(10px); }} to {{ opacity:1; transform: translateY(0); }} }}
       @media (prefers-reduced-motion: reduce) {{
         .kpi-card {{ animation: none !important; opacity:1 !important; transition: none !important; }}
       }}
@@ -1382,9 +1533,14 @@ def render_kpi_price_cards(selected_stocks, stock_data):
 
 
 def main():
-    # Header with personal branding
-    st.markdown('<h1 class="main-header">📊 Stock Market Analysis Platform</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Built by Dev Golakiya | UMass Amherst Business Analytics</p>', unsafe_allow_html=True)
+    # Header with personal branding - glass hero panel (see DESIGN.md "Glass Terminal")
+    st.markdown(
+        '<div class="hero-panel">'
+        '<h1 class="main-header">📊 Stock Market Analysis Platform</h1>'
+        '<p class="sub-header">Built by Dev Golakiya | UMass Amherst Business Analytics</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
     
     # Sidebar
