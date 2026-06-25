@@ -22,7 +22,9 @@ warnings.filterwarnings('ignore')
 import yfinance as yf
 import time
 import logging
+import math
 from contextlib import contextmanager
+import streamlit.components.v1 as components
 
 # Lightweight performance instrumentation. Flip to False to strip out all
 # timing/cache-tracking overhead and hide the debug panel entirely.
@@ -120,14 +122,6 @@ st.markdown("""
         font-size: 1rem;
         margin-bottom: 2rem;
     }
-    .metric-card {
-        background: #262730;
-        padding: 1rem;
-        border-radius: 10px;
-        color: #FAFAFA;
-        text-align: center;
-        margin: 0.5rem 0;
-    }
     .recommendation-buy {
         background: #008000;
         padding: 1rem;
@@ -172,6 +166,112 @@ st.markdown("""
         border-radius: 15px;
         color: white;
         text-align: center;
+    }
+
+    /* ---- Motion layer: tasteful, institutional. Transform/opacity only,
+       fully neutered under prefers-reduced-motion. No new colors. ---- */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes livePulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+    }
+    @keyframes shimmer {
+        0% { background-position: -400px 0; }
+        100% { background-position: 400px 0; }
+    }
+    @keyframes tickerScroll {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+    }
+
+    .risk-score-low, .risk-score-medium, .risk-score-high,
+    .recommendation-buy, .recommendation-sell, .recommendation-hold {
+        transition: transform 180ms cubic-bezier(.23, 1, .32, 1),
+                    box-shadow 180ms cubic-bezier(.23, 1, .32, 1);
+        animation: fadeInUp 420ms cubic-bezier(.23, 1, .32, 1) both;
+    }
+    .risk-score-low:hover, .risk-score-medium:hover, .risk-score-high:hover,
+    .recommendation-buy:hover, .recommendation-sell:hover, .recommendation-hold:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Live status badge - dot encodes real state (live feed vs simulated), not decoration */
+    .live-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: #FAFAFA;
+        margin: 0.25rem 0 0.75rem 0;
+    }
+    .live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: green;
+        flex-shrink: 0;
+        animation: livePulse 2s ease-in-out infinite;
+    }
+    .live-dot.is-static {
+        background: #666666;
+        animation: none;
+    }
+
+    /* Scrolling ticker tape */
+    .ticker-wrap {
+        overflow: hidden;
+        background: #262730;
+        border-radius: 5px;
+        padding: 0.5rem 0;
+        margin-bottom: 0.75rem;
+        white-space: nowrap;
+    }
+    .ticker-track {
+        display: inline-flex;
+        animation: tickerScroll 38s linear infinite;
+    }
+    .ticker-wrap:hover .ticker-track {
+        animation-play-state: paused;
+    }
+    .ticker-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0 1.5rem;
+        font-size: 0.95rem;
+        color: #FAFAFA;
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .ticker-symbol { font-weight: 700; }
+
+    /* Skeleton loading placeholder, matches the KPI card shape it precedes */
+    .skeleton-card {
+        background: #262730;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        height: 96px;
+    }
+    .skeleton-line {
+        height: 12px;
+        border-radius: 4px;
+        margin: 0.6rem auto;
+        background: linear-gradient(90deg, #262730 25%, #34374040 50%, #262730 75%);
+        background-size: 800px 100%;
+        animation: shimmer 1.6s linear infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .risk-score-low, .risk-score-medium, .risk-score-high,
+        .recommendation-buy, .recommendation-sell, .recommendation-hold,
+        .live-dot, .ticker-track, .skeleton-line {
+            animation: none !important;
+            transition: none !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1044,6 +1144,145 @@ def momentum_backtest(df, rebalance_days=21):
     }
 
 
+def render_ticker_tape(selected_stocks, stock_data):
+    """Continuous CSS marquee built from already-fetched stock_data - no extra network calls.
+    Pauses on hover (also satisfies WCAG 2.2.2 for moving content)."""
+    items_html = ""
+    for stock in selected_stocks:
+        sdf = stock_data[stock]
+        if len(sdf) == 0:
+            continue
+        price = sdf['Close'].iloc[-1]
+        change = sdf['Returns'].iloc[-1] * 100 if not pd.isna(sdf['Returns'].iloc[-1]) else 0
+        color = "green" if change >= 0 else "red"
+        arrow = "↗️" if change >= 0 else "↘️"
+        items_html += (
+            f'<span class="ticker-item">'
+            f'<span class="ticker-symbol">{stock}</span> ${price:.2f} '
+            f'<span style="color: {color};">{arrow} {change:+.2f}%</span>'
+            f'</span>'
+        )
+    if not items_html:
+        return
+    track = items_html * 2  # duplicated for a seamless -50% loop
+    st.markdown(f'<div class="ticker-wrap"><div class="ticker-track">{track}</div></div>', unsafe_allow_html=True)
+
+
+def render_live_status(use_real_data, last_market_date=None, current_time=None):
+    """Status badge whose dot encodes a real state (live feed vs simulated data), not decoration."""
+    is_live = use_real_data == "Real-Time (Yahoo Finance)"
+    dot_class = "" if is_live else "is-static"
+    if is_live and last_market_date is not None and current_time is not None:
+        text = (f"LIVE &middot; Market data as of {last_market_date.strftime('%B %d, %Y')} "
+                f"&middot; Last fetched {current_time.strftime('%I:%M:%S %p')}")
+    elif is_live:
+        text = "LIVE &middot; Yahoo Finance"
+    else:
+        text = "SIMULATED &middot; Statistical model data"
+    st.markdown(f'<div class="live-status"><span class="live-dot {dot_class}"></span>{text}</div>',
+                unsafe_allow_html=True)
+
+
+def render_skeleton_cards(n):
+    """Loading placeholder shaped like the KPI cards it precedes, shown only while data is actually fetching."""
+    n = max(n, 1)
+    cols = st.columns(n)
+    for c in cols:
+        with c:
+            st.markdown(
+                '<div class="skeleton-card">'
+                '<div class="skeleton-line" style="width:40%"></div>'
+                '<div class="skeleton-line" style="width:70%"></div>'
+                '<div class="skeleton-line" style="width:50%"></div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+
+def render_kpi_price_cards(selected_stocks, stock_data):
+    """Animated stock-price KPI tiles. st.markdown(unsafe_allow_html=True) never executes <script>
+    tags (browsers don't run scripts inserted via innerHTML), so the JS-driven count-up lives inside
+    components.html, which renders in a real iframe document. Counts up from 0 on every render -
+    that's intentional: it fires exactly when data actually refreshes (selection change, auto-refresh,
+    manual refresh), so the motion signals a real update rather than running on a timer for its own sake."""
+    cards_html = ""
+    count = 0
+    for stock in selected_stocks:
+        sdf = stock_data[stock]
+        if len(sdf) == 0:
+            continue
+        count += 1
+        price = float(sdf['Close'].iloc[-1])
+        change = float(sdf['Returns'].iloc[-1] * 100) if not pd.isna(sdf['Returns'].iloc[-1]) else 0.0
+        direction = "up" if change >= 0 else "down"
+        arrow = "↗️" if change >= 0 else "↘️"
+        sign_prefix = "+" if change >= 0 else ""
+        cards_html += f"""
+        <div class="kpi-card">
+          <div class="kpi-symbol">{stock}</div>
+          <div class="kpi-price" data-countup data-end="{price:.2f}" data-prefix="$" data-decimals="2">$0.00</div>
+          <div class="kpi-change kpi-{direction}">{arrow}
+            <span data-countup data-end="{change:.2f}" data-prefix="{sign_prefix}" data-decimals="2">0.00</span>%
+          </div>
+        </div>
+        """
+
+    if count == 0:
+        return
+
+    cols_per_row = 4
+    rows = math.ceil(count / cols_per_row)
+    height = 40 + rows * 132
+
+    html = f"""
+    <html><head><style>
+      html, body {{ margin:0; padding:0; background: transparent; font-family: "Source Sans Pro", sans-serif; }}
+      .kpi-grid {{ display:grid; grid-template-columns: repeat({cols_per_row}, 1fr); gap: 0.75rem; padding: 4px; }}
+      @media (max-width: 700px) {{ .kpi-grid {{ grid-template-columns: repeat(2, 1fr); }} }}
+      .kpi-card {{
+        background:#262730; border-radius:10px; padding:1rem; text-align:center; box-sizing:border-box;
+        color:#FAFAFA; opacity:0; animation: fadeInUp 420ms cubic-bezier(.23,1,.32,1) forwards;
+        transition: transform 180ms cubic-bezier(.23,1,.32,1), box-shadow 180ms cubic-bezier(.23,1,.32,1);
+      }}
+      .kpi-card:hover {{ transform: translateY(-2px); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }}
+      .kpi-symbol {{ font-size:0.95rem; font-weight:700; color:#FAFAFA; margin-bottom:0.25rem; }}
+      .kpi-price {{ font-size:1.6rem; font-weight:700; color:#FAFAFA; margin:0.1rem 0; }}
+      .kpi-change {{ font-size:0.95rem; }}
+      .kpi-up {{ color: green; }}
+      .kpi-down {{ color: red; }}
+      @keyframes fadeInUp {{ from {{ opacity:0; transform: translateY(8px); }} to {{ opacity:1; transform: translateY(0); }} }}
+      @media (prefers-reduced-motion: reduce) {{
+        .kpi-card {{ animation: none !important; opacity:1 !important; transition: none !important; }}
+      }}
+    </style></head>
+    <body>
+      <div class="kpi-grid">{cards_html}</div>
+      <script>
+        var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function ease(t) {{ return 1 - Math.pow(1 - t, 3); }}
+        document.querySelectorAll('[data-countup]').forEach(function(el) {{
+          var end = parseFloat(el.getAttribute('data-end'));
+          var prefix = el.getAttribute('data-prefix') || '';
+          var decimals = parseInt(el.getAttribute('data-decimals') || '2', 10);
+          if (isNaN(end)) {{ return; }}
+          if (reduceMotion) {{ el.textContent = prefix + end.toFixed(decimals); return; }}
+          var duration = 700;
+          var startTime = null;
+          function step(ts) {{
+            if (!startTime) startTime = ts;
+            var t = Math.min((ts - startTime) / duration, 1);
+            var value = end * ease(t);
+            el.textContent = prefix + value.toFixed(decimals);
+            if (t < 1) requestAnimationFrame(step);
+          }}
+          requestAnimationFrame(step);
+        }});
+      </script>
+    </body></html>
+    """
+    components.html(html, height=height, scrolling=False)
+
+
 def main():
     # Header with personal branding
     st.markdown('<h1 class="main-header">📊 Stock Market Analysis Platform</h1>', unsafe_allow_html=True)
@@ -1177,6 +1416,12 @@ def main():
     # once per cache window. Tabs must read from stock_data, not fetch again.
     stock_data = {}
 
+    # Skeleton placeholder shaped like the KPI cards below - shown only for the
+    # span of the actual fetch (cache hits skip it almost instantly).
+    skeleton_placeholder = st.empty()
+    with skeleton_placeholder.container():
+        render_skeleton_cards(min(len(selected_stocks), 4))
+
     if use_real_data == "Real-Time (Yahoo Finance)":
         # Map data_period (days) to yfinance period strings
         period_mapping = {
@@ -1186,7 +1431,7 @@ def main():
             1260: "5y"
         }
         yf_period = period_mapping.get(data_period, "1y")
-        
+
         with st.spinner("📡 Fetching real-time data from Yahoo Finance..."):
             for stock in selected_stocks:
                 # Cache hits skip fetch_real_stock_data's body entirely, so a
@@ -1200,18 +1445,22 @@ def main():
         with st.spinner("📊 Generating synthetic data..."):
             for stock in selected_stocks:
                 stock_data[stock] = generate_stock_data(stock, data_period)
-    
-    # Display last update timestamp for real-time data
+
+    skeleton_placeholder.empty()
+
+    # Live ticker tape - built from the stock_data already fetched above, no extra network calls.
+    render_ticker_tape(selected_stocks, stock_data)
+
+    # Live status badge - replaces the old plain caption with one that also
+    # carries the live-vs-simulated semantic state via the dot.
+    last_market_date, current_time = None, datetime.now()
     if use_real_data == "Real-Time (Yahoo Finance)" and stock_data:
         sample_stock = list(stock_data.keys())[0]
         sample_df = stock_data[sample_stock]
         if len(sample_df) > 0:
             last_market_date = sample_df.index[-1]
-            current_time = datetime.now()
-            
-            st.caption(f"📅 **Market data as of:** {last_market_date.strftime('%B %d, %Y')} | "
-                      f"**Last fetched:** {current_time.strftime('%I:%M:%S %p')}")
-    
+    render_live_status(use_real_data, last_market_date, current_time)
+
     # Show data source indicator
     st.markdown("---")
     if use_real_data == "Real-Time (Yahoo Finance)":
@@ -1240,24 +1489,9 @@ def main():
         with timed("Overview rendering"):
             st.header("📊 Market Overview")
         
-            # Stock price cards
-            cols = st.columns(min(len(selected_stocks), 4))
-            for i, stock in enumerate(selected_stocks):
-                with cols[i % 4]:
-                    sdf = stock_data[stock]
-                    price = sdf['Close'].iloc[-1]
-                    change = sdf['Returns'].iloc[-1] * 100 if not pd.isna(sdf['Returns'].iloc[-1]) else 0
-                    color = "green" if change >= 0 else "red"
-                    arrow = "↗️" if change >= 0 else "↘️"
-                
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <h3>{stock}</h3>
-                        <h2>${price:.2f}</h2>
-                        <p style="color: {color};">{arrow} {change:+.2f}%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
+            # Stock price cards - animated KPI tiles (count-up on refresh, hover lift)
+            render_kpi_price_cards(selected_stocks, stock_data)
+
             st.markdown("---")
         
             # Key metrics for selected stock
