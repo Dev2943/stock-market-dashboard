@@ -35,9 +35,7 @@ st.markdown("""
         font-size: 2.5rem;
         font-weight: bold;
         text-align: center;
-        background: linear-gradient(90deg, #2E3192, #1BFFFF);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #FAFAFA;
         margin-bottom: 1rem;
     }
     .sub-header {
@@ -47,11 +45,35 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #262730;
         padding: 1rem;
         border-radius: 10px;
-        color: white;
+        color: #FAFAFA;
         text-align: center;
+        margin: 0.5rem 0;
+    }
+    .recommendation-buy {
+        background: #008000;
+        padding: 1rem;
+        border-radius: 10px;
+        color: #FAFAFA;
+        text-align: left;
+        margin: 0.5rem 0;
+    }
+    .recommendation-sell {
+        background: #B00020;
+        padding: 1rem;
+        border-radius: 10px;
+        color: #FAFAFA;
+        text-align: left;
+        margin: 0.5rem 0;
+    }
+    .recommendation-hold {
+        background: #4B5563;
+        padding: 1rem;
+        border-radius: 10px;
+        color: #FAFAFA;
+        text-align: left;
         margin: 0.5rem 0;
     }
     .risk-score-low {
@@ -74,13 +96,6 @@ st.markdown("""
         border-radius: 15px;
         color: white;
         text-align: center;
-    }
-    .insight-box {
-        background: #f8f9fa;
-        border-left: 4px solid #667eea;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-radius: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -619,8 +634,9 @@ def create_stock_chart(df, symbol):
                             line=dict(color='blue', width=1), showlegend=False), row=4, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['MACD_signal'], name='Signal',
                             line=dict(color='red', width=1), showlegend=False), row=4, col=1)
+    macd_hist_colors = ['green' if v >= 0 else 'red' for v in df['MACD_hist']]
     fig.add_trace(go.Bar(x=df.index, y=df['MACD_hist'], name='Histogram',
-                        marker_color='green', showlegend=False), row=4, col=1)
+                        marker_color=macd_hist_colors, showlegend=False), row=4, col=1)
     
     fig.update_layout(height=800, showlegend=True, margin=dict(t=50, b=50, l=50, r=50))
     fig.update_yaxes(title_text="Price ($)", row=1, col=1)
@@ -1460,7 +1476,6 @@ def main():
         portfolio_df = pd.DataFrame(portfolio_data)
         
         # Format for display
-        # Format for display
         display_df = pd.DataFrame({
             'Stock': portfolio_df['Stock'],
             'Sector': portfolio_df['Sector'],
@@ -1472,28 +1487,9 @@ def main():
             'Risk Score': portfolio_df['Risk Score'].apply(lambda x: f"{x:.1f}"),
             'Sharpe Ratio': portfolio_df['Sharpe Ratio'].apply(lambda x: f"{x:.2f}")
         })
-        
+
         st.dataframe(display_df, use_container_width=True)
-        # Calculate weights
-        for item in portfolio_data:
-            item['Weight'] = (item['Value'] / total_value) * 100 if total_value > 0 else 0
-        
-        # Create dataframe from portfolio data
-        portfolio_df = pd.DataFrame(portfolio_data)
-        
-        # Format for display - map to correct column names
-        display_df = pd.DataFrame({
-            'Stock': portfolio_df['Stock'],
-            'Sector': portfolio_df['Sector'],
-            'Shares': portfolio_df['Shares'],
-            'Price': portfolio_df['Price'].apply(lambda x: f"${x:.2f}"),
-            'Value': portfolio_df['Value'].apply(lambda x: f"${x:,.2f}"),
-            'Weight': portfolio_df['Weight'].apply(lambda x: f"{x:.1f}%"),
-            'Expected Return': portfolio_df['Expected Return'].apply(lambda x: f"{x:+.2f}%"),
-            'Risk Score': portfolio_df['Risk Score'].apply(lambda x: f"{x:.1f}"),
-            'Sharpe Ratio': portfolio_df['Sharpe Ratio'].apply(lambda x: f"{x:.2f}")
-        })
-        
+
         st.markdown("---")
         
         

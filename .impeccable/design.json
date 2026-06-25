@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-24T00:00:00Z",
+  "title": "Design System: Stock Market Analysis Platform",
+  "extensions": {
+    "colorMeta": {
+      "canvas-black": {
+        "role": "neutral",
+        "displayName": "Canvas Black",
+        "canonical": "oklch(12% 0.01 260)",
+        "tonalRamp": ["oklch(8% 0.005 260)", "oklch(15% 0.008 260)", "oklch(22% 0.01 260)", "oklch(32% 0.01 260)", "oklch(45% 0.01 260)", "oklch(60% 0.008 260)", "oklch(80% 0.005 260)", "oklch(95% 0.003 260)"]
+      },
+      "panel-charcoal": {
+        "role": "neutral",
+        "displayName": "Panel Charcoal",
+        "canonical": "oklch(20% 0.01 270)",
+        "tonalRamp": ["oklch(10% 0.006 270)", "oklch(20% 0.01 270)", "oklch(28% 0.01 270)", "oklch(38% 0.01 270)", "oklch(50% 0.008 270)", "oklch(64% 0.006 270)", "oklch(80% 0.004 270)", "oklch(95% 0.002 270)"]
+      },
+      "ink-white": {
+        "role": "neutral",
+        "displayName": "Ink White",
+        "canonical": "oklch(98% 0.002 270)",
+        "tonalRamp": ["oklch(15% 0.002 270)", "oklch(28% 0.002 270)", "oklch(40% 0.002 270)", "oklch(52% 0.002 270)", "oklch(65% 0.002 270)", "oklch(78% 0.002 270)", "oklch(90% 0.002 270)", "oklch(98% 0.002 270)"]
+      },
+      "muted-gray": {
+        "role": "neutral",
+        "displayName": "Muted Gray",
+        "canonical": "oklch(45% 0 0)",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(28% 0 0)", "oklch(40% 0 0)", "oklch(52% 0 0)", "oklch(64% 0 0)", "oklch(76% 0 0)", "oklch(88% 0 0)", "oklch(95% 0 0)"]
+      },
+      "signal-red": {
+        "role": "primary",
+        "displayName": "Signal Red",
+        "canonical": "oklch(62% 0.19 25)",
+        "tonalRamp": ["oklch(20% 0.08 25)", "oklch(32% 0.12 25)", "oklch(44% 0.16 25)", "oklch(54% 0.19 25)", "oklch(62% 0.19 25)", "oklch(72% 0.15 25)", "oklch(84% 0.09 25)", "oklch(94% 0.03 25)"]
+      },
+      "gain-green": {
+        "role": "functional",
+        "displayName": "Gain Green",
+        "canonical": "oklch(45% 0.17 142)",
+        "tonalRamp": ["oklch(16% 0.07 142)", "oklch(26% 0.11 142)", "oklch(36% 0.15 142)", "oklch(45% 0.17 142)", "oklch(58% 0.17 142)", "oklch(70% 0.14 142)", "oklch(84% 0.08 142)", "oklch(94% 0.03 142)"]
+      },
+      "loss-red": {
+        "role": "functional",
+        "displayName": "Loss Red",
+        "canonical": "oklch(63% 0.26 29)",
+        "tonalRamp": ["oklch(20% 0.1 29)", "oklch(32% 0.16 29)", "oklch(45% 0.21 29)", "oklch(55% 0.25 29)", "oklch(63% 0.26 29)", "oklch(73% 0.2 29)", "oklch(85% 0.11 29)", "oklch(94% 0.04 29)"]
+      },
+      "risk-low-a": {
+        "role": "functional",
+        "displayName": "Risk Tier — Low (Teal)",
+        "canonical": "oklch(55% 0.09 192)",
+        "tonalRamp": ["oklch(18% 0.04 192)", "oklch(28% 0.06 192)", "oklch(40% 0.08 192)", "oklch(55% 0.09 192)", "oklch(66% 0.09 192)", "oklch(77% 0.08 192)", "oklch(88% 0.05 192)", "oklch(95% 0.02 192)"]
+      },
+      "risk-low-b": {
+        "role": "functional",
+        "displayName": "Risk Tier — Low (Green)",
+        "canonical": "oklch(80% 0.18 152)",
+        "tonalRamp": ["oklch(20% 0.08 152)", "oklch(32% 0.12 152)", "oklch(46% 0.16 152)", "oklch(60% 0.18 152)", "oklch(72% 0.18 152)", "oklch(80% 0.18 152)", "oklch(89% 0.1 152)", "oklch(95% 0.04 152)"]
+      },
+      "risk-medium-a": {
+        "role": "functional",
+        "displayName": "Risk Tier — Medium (Orange)",
+        "canonical": "oklch(72% 0.15 55)",
+        "tonalRamp": ["oklch(20% 0.06 55)", "oklch(32% 0.09 55)", "oklch(46% 0.12 55)", "oklch(60% 0.14 55)", "oklch(72% 0.15 55)", "oklch(81% 0.13 55)", "oklch(89% 0.08 55)", "oklch(95% 0.03 55)"]
+      },
+      "risk-medium-b": {
+        "role": "functional",
+        "displayName": "Risk Tier — Medium (Gold)",
+        "canonical": "oklch(85% 0.14 90)",
+        "tonalRamp": ["oklch(22% 0.06 90)", "oklch(35% 0.09 90)", "oklch(50% 0.12 90)", "oklch(65% 0.14 90)", "oklch(76% 0.14 90)", "oklch(85% 0.14 90)", "oklch(91% 0.08 90)", "oklch(96% 0.03 90)"]
+      },
+      "risk-high-a": {
+        "role": "functional",
+        "displayName": "Risk Tier — High (Crimson)",
+        "canonical": "oklch(55% 0.21 15)",
+        "tonalRamp": ["oklch(18% 0.09 15)", "oklch(28% 0.14 15)", "oklch(40% 0.18 15)", "oklch(55% 0.21 15)", "oklch(65% 0.2 15)", "oklch(76% 0.14 15)", "oklch(87% 0.07 15)", "oklch(95% 0.03 15)"]
+      },
+      "risk-high-b": {
+        "role": "functional",
+        "displayName": "Risk Tier — High (Coral)",
+        "canonical": "oklch(65% 0.19 30)",
+        "tonalRamp": ["oklch(20% 0.08 30)", "oklch(32% 0.12 30)", "oklch(45% 0.16 30)", "oklch(58% 0.19 30)", "oklch(65% 0.19 30)", "oklch(75% 0.15 30)", "oklch(87% 0.08 30)", "oklch(95% 0.03 30)"]
+      },
+      "deprecated-header-a": {
+        "role": "deprecated",
+        "displayName": "Deprecated Header Gradient — Indigo (slated for removal)",
+        "canonical": "oklch(35% 0.15 280)"
+      },
+      "deprecated-header-b": {
+        "role": "deprecated",
+        "displayName": "Deprecated Header Gradient — Cyan (slated for removal)",
+        "canonical": "oklch(85% 0.13 195)"
+      },
+      "deprecated-metric-a": {
+        "role": "deprecated",
+        "displayName": "Deprecated Metric Gradient — Periwinkle (slated for removal)",
+        "canonical": "oklch(65% 0.15 270)"
+      },
+      "deprecated-metric-b": {
+        "role": "deprecated",
+        "displayName": "Deprecated Metric Gradient — Purple (slated for removal)",
+        "canonical": "oklch(48% 0.17 310)"
+      },
+      "dead-insight-bg": {
+        "role": "deprecated",
+        "displayName": "Dead Insight Box Background (unused, delete the rule)",
+        "canonical": "oklch(98% 0.002 240)"
+      },
+      "dead-insight-border": {
+        "role": "deprecated",
+        "displayName": "Dead Insight Box Border (unused side-stripe, delete the rule)",
+        "canonical": "oklch(65% 0.15 270)"
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Masthead)", "purpose": "The single typographic override in the codebase — the '📊 Stock Market Analysis Platform' masthead only. Currently rendered as gradient-clip text; should render solid." },
+      "caption": { "displayName": "Caption (Byline)", "purpose": "The sub-header byline under the masthead. Needs a contrast fix against the dark canvas, not a size change." },
+      "body": { "displayName": "Body", "purpose": "Dataframe cells, banner text, insight bullets — entirely inherited from Streamlit's default UI font, no override." }
+    },
+    "shadows": [
+      { "name": "hover-lift", "value": "0 2px 8px rgba(0, 0, 0, 0.4)", "purpose": "Subtle lift on interactive cards/rows on hover, against the dark canvas. Not present in code yet — documented direction." },
+      { "name": "overlay-lift", "value": "0 8px 32px rgba(0, 0, 0, 0.5)", "purpose": "Separation for any future modal, popover, or dropdown from the page behind it. Not present in code yet — documented direction." }
+    ],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Risk Score Card — Low",
+      "kind": "card",
+      "refersTo": "risk-score-low",
+      "description": "Risk Analysis tab. Solid teal fill (flattened from the current two-stop gradient) signaling a risk score under 35/100.",
+      "html": "<div class=\"ds-risk-card ds-risk-low\"><h2>📊 Dev's Risk Score</h2><h1>24/100</h1><h3>Risk Level: Low</h3><p class=\"ds-risk-caption\">Multi-factor analysis: Volatility (30%), Momentum (25%), Liquidity (20%), Technical (15%), Drawdown (10%)</p></div>",
+      "css": ".ds-risk-card { background: #11998E; color: #FAFAFA; text-align: center; border-radius: 15px; padding: 1.5rem; } .ds-risk-caption { font-size: 0.9rem; margin-top: 1rem; }"
+    },
+    {
+      "name": "Risk Score Card — Medium",
+      "kind": "card",
+      "refersTo": "risk-score-medium",
+      "description": "Risk Analysis tab. Solid orange fill signaling a risk score between 35 and 60.",
+      "html": "<div class=\"ds-risk-card ds-risk-medium\"><h2>📊 Dev's Risk Score</h2><h1>49/100</h1><h3>Risk Level: Medium</h3><p class=\"ds-risk-caption\">Multi-factor analysis: Volatility (30%), Momentum (25%), Liquidity (20%), Technical (15%), Drawdown (10%)</p></div>",
+      "css": ".ds-risk-card { background: #F2994A; color: #FAFAFA; text-align: center; border-radius: 15px; padding: 1.5rem; } .ds-risk-caption { font-size: 0.9rem; margin-top: 1rem; }"
+    },
+    {
+      "name": "Risk Score Card — High",
+      "kind": "card",
+      "refersTo": "risk-score-high",
+      "description": "Risk Analysis tab. Solid crimson fill signaling a risk score of 60 or above.",
+      "html": "<div class=\"ds-risk-card ds-risk-high\"><h2>📊 Dev's Risk Score</h2><h1>64/100</h1><h3>Risk Level: High</h3><p class=\"ds-risk-caption\">Multi-factor analysis: Volatility (30%), Momentum (25%), Liquidity (20%), Technical (15%), Drawdown (10%)</p></div>",
+      "css": ".ds-risk-card { background: #EB3349; color: #FAFAFA; text-align: center; border-radius: 15px; padding: 1.5rem; } .ds-risk-caption { font-size: 0.9rem; margin-top: 1rem; }"
+    },
+    {
+      "name": "Metric Tile (Overview)",
+      "kind": "card",
+      "refersTo": "metric-card",
+      "description": "Overview tab price tile, one per selected stock. Documented target: flat Panel Charcoal background replacing the current deprecated purple gradient; gain/loss color stays inline on the percent-change line only.",
+      "html": "<div class=\"ds-metric-tile\"><h3>AAPL</h3><h2>$269.05</h2><p class=\"ds-metric-down\">↘️ -0.49%</p></div>",
+      "css": ".ds-metric-tile { background: #262730; color: #FAFAFA; text-align: center; border-radius: 10px; padding: 1rem; margin: 0.5rem 0; } .ds-metric-tile h2 { margin: 0.25rem 0; } .ds-metric-down { color: #FF0000; } .ds-metric-up { color: #008000; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quant Terminal",
+    "overview": "The dashboard sits on a genuinely good foundation it never earned credit for: Streamlit's dark shell (#0E1117 canvas, #262730 panels, #FAFAFA text) already reads as a TradingView-style instrument panel — dense, dark, low-glare, built for someone who watches numbers all day. That foundation is undermined by a second layer of decoration bolted on top: a gradient-clip-text masthead, a purple-to-violet metric-card gradient lifted straight from 2021 SaaS landing pages, and one dead CSS class (.insight-box, a side-stripe-bordered callout) that isn't even wired into any markup. The Quant Terminal direction means stripping that decorative layer back to the shell's own dark, flat, color-as-signal language — the same restraint a real risk desk or trading terminal enforces, because every accent color there means something specific (buy, sell, breach, warning), not 'this card is important'. This system explicitly rejects the generic-AI-SaaS-dashboard look this codebase currently has (gradient cards, gradient text headers) and consumer-trading-app playfulness (Robinhood-style rounded cuteness). Depth comes from contrast and density, not gradients; color is rationed to data that actually carries meaning — gains/losses, risk tiers, breach flags — never spent on decoration.",
+    "keyCharacteristics": [
+      "Near-black canvas, charcoal panels, off-white text — inherited from Streamlit's dark theme, currently uncommitted to the repo",
+      "Color is semantic only: red/green for direction, a three-stop ramp for risk tiers, nothing else",
+      "Flat by default; elevation reserved for transient surfaces (hover, modal, popover), never base layout",
+      "Dense, multi-metric layouts (4-5 st.metric columns, 9 tabs) read at terminal speed, not landing-page speed"
+    ],
+    "rules": [
+      { "name": "The Risk Tier Rule", "body": "Color may only encode the five things that already have meaning in this codebase: gain/loss direction, risk tier (low/medium/high), VaR breach/no-breach, factor sign (positive/negative alpha or beta), and recommendation (buy/hold/sell). If a color isn't standing in for one of those, it's decoration and it's not allowed.", "section": "colors" },
+      { "name": "The One Red Rule", "body": "Signal Red (#FF4B4B, Streamlit's UI accent) and Loss Red (#FF0000, the gains/losses color) are not allowed to keep diverging by accident. The next time either is touched, converge them to a single deliberate red used for both 'UI accent' and 'negative number,' or pick a different, explicit Signal Red that isn't just whatever Streamlit shipped.", "section": "colors" },
+      { "name": "The Inherited-Until-Earned Rule", "body": "Don't introduce a second typeface or a new display size to 'make a tab feel special.' The system has earned exactly one display style (the masthead); any new typographic emphasis should come from Streamlit's existing st.header/st.subheader/st.metric hierarchy, not a new custom class.", "section": "typography" },
+      { "name": "The Flat-at-Rest Rule", "body": "Nothing in the base layout (tab panels, metric tiles, the sidebar) carries a shadow at rest. Shadows only appear in direct response to interaction state (hover, focus) or for content that's genuinely floating above the page (overlays, popovers).", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the dark Canvas Black / Panel Charcoal / Ink White base — commit it explicitly via a .streamlit/config.toml [theme] block instead of relying on each viewer's inherited default, so the deployed app looks the same for every recruiter who opens it.",
+      "Do reserve color strictly for the five meaningful signals: gain/loss direction, risk tier, VaR breach, factor sign, buy/hold/sell — per the Risk Tier Rule.",
+      "Do use the native st.info / st.success / st.warning / st.error banners for any new contextual callout — they already deliver the 'instrumented and quiet' feel the system wants.",
+      "Do keep the base layout flat; introduce shadows only for hover/focus states and transient overlays, per the Flat-at-Rest Rule.",
+      "Do fix .sub-header's color: #666 — it was written against an assumed light page and fails contrast against the #0E1117 dark canvas it actually renders on."
+    ],
+    "donts": [
+      "Don't use gradient-clip-text headings (-webkit-background-clip: text) anywhere — explicitly the AI-SaaS tell flagged in PRODUCT.md's anti-references. Remove .main-header's #2E3192 → #1BFFFF gradient and render it as solid Ink White.",
+      "Don't use decorative gradient card backgrounds where the gradient carries no information — explicitly the .metric-card (#667EEA → #764BA2) pattern. The only gradient/color-coded card allowed to exist is the risk score card, because its color is the data.",
+      "Don't use border-left/border-right as a colored accent stripe on any card or callout — .insight-box's 4px #667EEA left border is dead code; delete the rule, don't ever wire it up.",
+      "Don't introduce a second display typeface or a new heading size 'for emphasis.' One display style exists (the masthead); everything else borrows Streamlit's native st.header/st.subheader/st.metric hierarchy.",
+      "Don't add a new one-off card style (a new radius, a new gradient, a new padding scale) per tab. Extend the three radius tokens (sm 5px / md 10px / lg 15px) and three spacing tokens (sm 0.5rem / md 1rem / lg 1.5rem) already in use rather than inventing a fourth value."
+    ]
+  }
+}
