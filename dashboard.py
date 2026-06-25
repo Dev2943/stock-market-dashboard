@@ -265,12 +265,110 @@ st.markdown("""
         animation: shimmer 1.6s linear infinite;
     }
 
+    /* ---- Ambient backdrop: faint grid/sparkline/candlestick texture painted onto
+       .stApp's own canvas-black background (the only opaque layer at this level -
+       sidebar, cards and banners all have their own backgrounds, so this never
+       competes with text). Pure CSS, no extra assets. ---- */
+    .stApp {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480' viewBox='0 0 480 480'%3E%3Cg stroke='rgba(250,250,250,0.05)' stroke-width='1'%3E%3Cline x1='0' y1='120' x2='480' y2='120'/%3E%3Cline x1='0' y1='360' x2='480' y2='360'/%3E%3Cline x1='160' y1='0' x2='160' y2='480'/%3E%3Cline x1='320' y1='0' x2='320' y2='480'/%3E%3C/g%3E%3Cpolyline points='20,300 70,260 120,300 170,220 220,260 270,180 320,230 370,150 420,200 460,140' fill='none' stroke='rgba(250,250,250,0.07)' stroke-width='1.5'/%3E%3Cg fill='rgba(250,250,250,0.08)'%3E%3Ccircle cx='70' cy='260' r='2.5'/%3E%3Ccircle cx='220' cy='260' r='2.5'/%3E%3Ccircle cx='370' cy='150' r='2.5'/%3E%3C/g%3E%3Cg stroke='rgba(250,250,250,0.045)' stroke-width='2'%3E%3Cline x1='40' y1='400' x2='40' y2='430'/%3E%3Cline x1='65' y1='390' x2='65' y2='440'/%3E%3Cline x1='90' y1='405' x2='90' y2='425'/%3E%3Cline x1='115' y1='395' x2='115' y2='435'/%3E%3Cline x1='140' y1='410' x2='140' y2='420'/%3E%3C/g%3E%3C/svg%3E");
+        background-repeat: repeat;
+        background-size: 480px 480px;
+        background-attachment: fixed;
+        animation: ambienceDrift 140s linear infinite;
+    }
+    @keyframes ambienceDrift {
+        from { background-position: 0 0; }
+        to { background-position: 480px 480px; }
+    }
+
+    /* ---- Buttons: hover lift + soft Signal-Red glow + one-shot shimmer + press.
+       Scoped to real content buttons only - excludes header/per-element toolbar icons. ---- */
+    button[data-testid="stBaseButton-secondary"],
+    button[data-testid="stBaseButton-primary"] {
+        position: relative;
+        overflow: hidden;
+        transition: transform 150ms cubic-bezier(.23, 1, .32, 1),
+                    box-shadow 150ms cubic-bezier(.23, 1, .32, 1),
+                    border-color 150ms cubic-bezier(.23, 1, .32, 1);
+    }
+    button[data-testid="stBaseButton-secondary"]:hover,
+    button[data-testid="stBaseButton-primary"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(255, 75, 75, 0.16);
+        border-color: rgba(255, 75, 75, 0.55);
+    }
+    button[data-testid="stBaseButton-secondary"]:active,
+    button[data-testid="stBaseButton-primary"]:active {
+        transform: translateY(0) scale(0.97);
+        box-shadow: none;
+    }
+    button[data-testid="stBaseButton-secondary"]::after,
+    button[data-testid="stBaseButton-primary"]::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -150%;
+        width: 50%;
+        height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.10), transparent);
+        transform: skewX(-20deg);
+        transition: left 550ms ease;
+        pointer-events: none;
+    }
+    button[data-testid="stBaseButton-secondary"]:hover::after,
+    button[data-testid="stBaseButton-primary"]:hover::after {
+        left: 150%;
+    }
+
+    /* ---- Tabs: smooth color transition on selection instead of an instant snap ---- */
+    button[data-testid="stTab"] {
+        transition: color 200ms cubic-bezier(.23, 1, .32, 1);
+    }
+
+    /* ---- Section entrance: tab panels toggle display:none -> block on switch,
+       which restarts a CSS animation for free (no JS needed). ---- */
+    div[data-baseweb="tab-panel"] {
+        animation: fadeInUp 420ms cubic-bezier(.23, 1, .32, 1) both;
+    }
+
+    /* ---- Chart / metric hover micro-motion ---- */
+    [data-testid="stPlotlyChart"] {
+        border-radius: 10px;
+        transition: transform 200ms cubic-bezier(.23, 1, .32, 1),
+                    box-shadow 200ms cubic-bezier(.23, 1, .32, 1);
+    }
+    [data-testid="stPlotlyChart"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    }
+    [data-testid="stMetric"] {
+        border-radius: 8px;
+        padding: 0.4rem 0.5rem;
+        margin: -0.4rem -0.5rem;
+        transition: background-color 150ms cubic-bezier(.23, 1, .32, 1),
+                    transform 150ms cubic-bezier(.23, 1, .32, 1);
+    }
+    [data-testid="stMetric"]:hover {
+        background-color: rgba(255, 255, 255, 0.03);
+        transform: translateY(-1px);
+    }
+
     @media (prefers-reduced-motion: reduce) {
         .risk-score-low, .risk-score-medium, .risk-score-high,
         .recommendation-buy, .recommendation-sell, .recommendation-hold,
-        .live-dot, .ticker-track, .skeleton-line {
+        .live-dot, .ticker-track, .skeleton-line, .stApp,
+        button[data-testid="stBaseButton-secondary"],
+        button[data-testid="stBaseButton-primary"],
+        button[data-testid="stTab"],
+        div[data-baseweb="tab-panel"],
+        [data-testid="stPlotlyChart"],
+        [data-testid="stMetric"] {
             animation: none !important;
             transition: none !important;
+        }
+        button[data-testid="stBaseButton-secondary"]::after,
+        button[data-testid="stBaseButton-primary"]::after {
+            display: none !important;
         }
     }
 </style>
