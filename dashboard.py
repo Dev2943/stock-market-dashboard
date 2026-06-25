@@ -1024,14 +1024,18 @@ def main():
             if time_since_refresh >= 30:
                 st.session_state.last_refresh_time = datetime.now()
                 st.session_state.refresh_counter += 1
-                st.cache_data.clear()
+                # Clear only the live-price cache so the hourly factor-proxy
+                # cache and other unrelated cached data aren't force-refetched.
+                fetch_real_stock_data.clear()
                 st.rerun()
-        
+
         # Manual refresh button
         if st.sidebar.button("🔄 Force Refresh Now", help="Fetch latest data immediately"):
             st.session_state.last_refresh_time = datetime.now()
             st.session_state.refresh_counter += 1
-            st.cache_data.clear()
+            # Clear only the live-price cache so the hourly factor-proxy
+            # cache and other unrelated cached data aren't force-refetched.
+            fetch_real_stock_data.clear()
             st.rerun()
         
         # Show refresh stats
@@ -1047,9 +1051,12 @@ def main():
         st.warning("⚠️ Please select at least one stock from the sidebar!")
         return
     
-    # Load data based on user selection
+    # Load data based on user selection. stock_data is the single source of
+    # truth for every tab below — fetch_real_stock_data is cached per
+    # (symbol, period), so each ticker/timeframe hits Yahoo Finance at most
+    # once per cache window. Tabs must read from stock_data, not fetch again.
     stock_data = {}
-    
+
     if use_real_data == "Real-Time (Yahoo Finance)":
         # Map data_period (days) to yfinance period strings
         period_mapping = {
