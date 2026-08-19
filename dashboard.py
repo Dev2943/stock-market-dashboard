@@ -30,7 +30,7 @@ from latency_engine import render_latency_engine_tab
 # Live telemetry from the C++ low-latency order book engine. Reads a local
 # engine when one is running, otherwise replays engine_session.json — a real
 # session captured on hardware where the measurements mean something.
-from latency_engine import render_latency_engine_tab
+
 
 # Lightweight performance instrumentation. Flip to False to strip out all
 # timing/cache-tracking overhead and hide the debug panel entirely.
@@ -2607,13 +2607,7 @@ def main():
     # Snapshot this rerun's timings/cache status for the sidebar debug panel.
     # The panel is drawn earlier in this same function, so it always shows
     # the PREVIOUS completed rerun's numbers, not this one.
-        with tab10:
-            with timed("Latency engine rendering"):
-                try:
-                  render_latency_engine_tab()
-                except Exception as exc:
-                    _timing_logger.exception("Latency engine tab failed")
-                    st.error(f"Latency engine unavailable: {exc}")
+        
     if DEBUG_PERFORMANCE:
         st.session_state['last_timings'] = dict(_TIMINGS)
         st.session_state['last_cache_status'] = {k: dict(v) for k, v in _CACHE_STATUS.items()}
