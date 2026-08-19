@@ -36,6 +36,18 @@ SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "engine_session.json")
 HIST_BUCKETS = 80
 
+# use_container_width is deprecated after 2025-12-31 in favour of width, but
+# older Streamlit builds don't accept width. Pick whichever this install
+# supports so the tab keeps working across versions rather than warning on new
+# ones and breaking on old ones.
+try:
+    from streamlit import __version__ as _ST_VER
+    _WIDTH = ({"width": "stretch"}
+              if tuple(int(x) for x in _ST_VER.split(".")[:2]) >= (1, 49)
+              else {"use_container_width": True})
+except Exception:
+    _WIDTH = {"use_container_width": True}
+
 
 # ---------------------------------------------------------------- transport
 
@@ -235,12 +247,15 @@ python3 capture_session.py --seconds 30
 
     st.markdown("---")
     left, right = st.columns(2)
+    # Explicit keys: Streamlit derives an element's internal ID from its type
+    # and parameters, and these two charts are structurally similar enough to
+    # collide. Without keys the second one raises a duplicate-ID error.
     with left:
         st.plotly_chart(_latency_figure(t2b, "Tick to book", "#38ef7d"),
-                        use_container_width=True)
+                        key="lat_engine_tick_to_book", **_WIDTH)
     with right:
         st.plotly_chart(_latency_figure(svc, "Book apply time", "#11998e"),
-                        use_container_width=True)
+                        key="lat_engine_service_time", **_WIDTH)
     st.caption(
         f"Distributions cover the last {frame.get('window_s', 0):.2f} s "
         f"({t2b.get('n', 0):,} samples) rather than the whole session, so they "
