@@ -25,6 +25,7 @@ import logging
 import math
 from contextlib import contextmanager
 import streamlit.components.v1 as components
+from latency_engine import render_latency_engine_tab
 
 # Lightweight performance instrumentation. Flip to False to strip out all
 # timing/cache-tracking overhead and hide the debug panel entirely.
@@ -1736,7 +1737,8 @@ def main():
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "📊 Overview", "🎯 Risk Analysis", "📈 Technical", "🔮 Forecast",
         "📉 Performance", "💼 Portfolio",
-        "⚠️ VaR & Stress Test", "📐 Options Pricer", "🔬 Factor Model"
+        "⚠️ VaR & Stress Test", "📐 Options Pricer", "🔬 Factor Model",
+        "⚡ Latency Engine"
     ])
     
     with tab1:
@@ -2587,6 +2589,9 @@ def main():
     # Snapshot this rerun's timings/cache status for the sidebar debug panel.
     # The panel is drawn earlier in this same function, so it always shows
     # the PREVIOUS completed rerun's numbers, not this one.
+        with tab10:
+        with timed("Latency engine rendering"):
+            render_latency_engine_tab()
     if DEBUG_PERFORMANCE:
         st.session_state['last_timings'] = dict(_TIMINGS)
         st.session_state['last_cache_status'] = {k: dict(v) for k, v in _CACHE_STATUS.items()}
