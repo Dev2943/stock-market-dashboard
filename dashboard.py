@@ -2608,8 +2608,12 @@ def main():
     # The panel is drawn earlier in this same function, so it always shows
     # the PREVIOUS completed rerun's numbers, not this one.
         with tab10:
-        with timed("Latency engine rendering"):
-            render_latency_engine_tab()
+            with timed("Latency engine rendering"):
+                try:
+                  render_latency_engine_tab()
+                except Exception as exc:
+                    _timing_logger.exception("Latency engine tab failed")
+                    st.error(f"Latency engine unavailable: {exc}")
     if DEBUG_PERFORMANCE:
         st.session_state['last_timings'] = dict(_TIMINGS)
         st.session_state['last_cache_status'] = {k: dict(v) for k, v in _CACHE_STATUS.items()}
