@@ -27,6 +27,11 @@ from contextlib import contextmanager
 import streamlit.components.v1 as components
 from latency_engine import render_latency_engine_tab
 
+# Live telemetry from the C++ low-latency order book engine. Reads a local
+# engine when one is running, otherwise replays engine_session.json — a real
+# session captured on hardware where the measurements mean something.
+from latency_engine import render_latency_engine_tab
+
 # Lightweight performance instrumentation. Flip to False to strip out all
 # timing/cache-tracking overhead and hide the debug panel entirely.
 DEBUG_PERFORMANCE = True
@@ -1734,7 +1739,7 @@ def main():
     risk_score, risk_category = calculate_dev_risk_score(df)
     
     # Main tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "📊 Overview", "🎯 Risk Analysis", "📈 Technical", "🔮 Forecast",
         "📉 Performance", "💼 Portfolio",
         "⚠️ VaR & Stress Test", "📐 Options Pricer", "🔬 Factor Model",
@@ -2585,6 +2590,19 @@ def main():
                 st.caption("Strategy goes long when 12-1 month momentum is positive, short when negative. Sub-50% hit rate with positive returns reflects momentum's characteristic negative-skew payoff profile.")
             else:
                 st.info("Need 252+ days of data to run the momentum backtest.")
+
+    with tab10:
+        with timed("Latency engine rendering"):
+            # Unlike the other tabs this one depends on an external process, so
+            # a failure here must not take the dashboard down with it. The
+            # renderer already handles a missing engine and a missing recording;
+            # this catches anything else — a malformed session file, a schema
+            # change — and confines it to this tab.
+            try:
+                render_latency_engine_tab()
+            except Exception as exc:
+                _timing_logger.exception("Latency engine tab failed")
+                st.error(f"Latency engine unavailable: {exc}")
 
     # Snapshot this rerun's timings/cache status for the sidebar debug panel.
     # The panel is drawn earlier in this same function, so it always shows
